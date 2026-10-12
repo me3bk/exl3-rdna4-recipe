@@ -1,7 +1,7 @@
-From 04a71479f082cc02c987b910e848d70ba72ec1f7 Mon Sep 17 00:00:00 2001
+From 0410a03932857dbbe7918869ac1081360afce307 Mon Sep 17 00:00:00 2001
 From: Parth Thakre <144053824+parth-thakre@users.noreply.github.com>
 Date: Mon, 12 Oct 2026 02:07:58 +0530
-Subject: [PATCH 14/18] Split-decode: fall back to single-stage when a
+Subject: [PATCH 14/15] Split-decode: fall back to single-stage when a
  multi-stage tile overflows shared memory
 
 With EXL3_DEC_STAGES=2 and the Q4W kernel, the 128-row tile (16 q heads per kv head, 8-token verify,

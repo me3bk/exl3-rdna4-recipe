@@ -1,7 +1,7 @@
-From 3b2c659b5e34b000e663e03a2996938cb4d392a6 Mon Sep 17 00:00:00 2001
+From 324a856c70016af3f54d84ae6f2108aff1934140 Mon Sep 17 00:00:00 2001
 From: Parth Thakre <144053824+parth-thakre@users.noreply.github.com>
 Date: Sat, 10 Oct 2026 20:34:11 +0530
-Subject: [PATCH 12/18] Split-decode attention: EXL3_DEC_* tuning and the Q4W
+Subject: [PATCH 12/15] Split-decode attention: EXL3_DEC_* tuning and the Q4W
  kernel on the dense row layout
 
 Port of 0603ac1 onto dd39a01's dense (query, head) rows. EXL3_DEC_GROUP=1 raises the

@@ -1,7 +1,7 @@
-From b3e9976586e5141a87ca9d2a6e601be5c24bbdf8 Mon Sep 17 00:00:00 2001
+From 68ea089645dbc09309d4e25efd68a31a10a3194c Mon Sep 17 00:00:00 2001
 From: local <local@localhost>
 Date: Tue, 6 Oct 2026 13:42:26 +0530
-Subject: [PATCH 06/18] ROCm: keep the 32-row WMMA GEMV accumulator out of
+Subject: [PATCH 06/15] ROCm: keep the 32-row WMMA GEMV accumulator out of
  scratch
 
 The fused epilogue's store loop stopped at rows_valid with a break. At

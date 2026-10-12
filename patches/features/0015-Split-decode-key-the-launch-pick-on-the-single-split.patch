@@ -1,7 +1,7 @@
-From 419a376c3b79e81dde96a71d57e06c43a6c20c78 Mon Sep 17 00:00:00 2001
+From 5a03aa174758519b5257c77567031456382ab8b7 Mon Sep 17 00:00:00 2001
 From: Parth Thakre <144053824+parth-thakre@users.noreply.github.com>
 Date: Mon, 12 Oct 2026 03:13:43 +0530
-Subject: [PATCH 15/18] Split-decode: key the launch pick on the single-split
+Subject: [PATCH 15/15] Split-decode: key the launch pick on the single-split
  specialization
 
 The FINAL (single split) kernel has its own shared-memory footprint: at the 128-row Q4W tile with

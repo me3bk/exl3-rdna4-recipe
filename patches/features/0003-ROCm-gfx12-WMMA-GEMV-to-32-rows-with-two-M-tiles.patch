@@ -1,7 +1,7 @@
-From b85d401a4707c3de0d066485305c5dd95b1f76b5 Mon Sep 17 00:00:00 2001
+From 54d0cd1344cfc758642c40e3556f3f9c9f0fc3c2 Mon Sep 17 00:00:00 2001
 From: local <local@localhost>
 Date: Tue, 6 Oct 2026 13:18:11 +0530
-Subject: [PATCH 03/18] ROCm: gfx12 WMMA GEMV to 32 rows with two M tiles
+Subject: [PATCH 03/15] ROCm: gfx12 WMMA GEMV to 32 rows with two M tiles
 
 bsz 4 x 8 verify rows (and the DFlash2 draft's 4 x 8-row block) are 32 rows
 per linear, still past the 16-row WMMA kernel. M = 32 runs two 16-row M

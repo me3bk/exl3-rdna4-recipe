@@ -1,20 +1,20 @@
 # Patches
 
-All against ExLlamaV3 `dev` at 9cc3bd1 (v1.6.1 plus the next day's commits). TabbyAPI needs no patch at 2fd6cc7, which
-accepts ROCm GPUs natively.
+All against ExLlamaV3 `dev` at 0f685aa (v1.6.1 plus two days of commits, among them our DeltaNet scan change).
+TabbyAPI needs no patch at 2fd6cc7, which accepts ROCm GPUs natively.
 
 | File | Applied by `setup/build_exllamav3.sh` | What |
 |---|---|---|
-| `exllamav3-rdna4.patch` | always | Everything of ours: `git diff 9cc3bd1 live-1012`. |
-| `features/*.patch` | no | The same as its 18 commits, for reading and review. |
+| `exllamav3-rdna4.patch` | always | Everything of ours: `git diff 0f685aa live-1013`. |
+| `features/*.patch` | no | The same as its 15 commits, for reading and review. |
 | `previous/exllamav3-rdna4-0662fac.patch` | only if you select the previous base (`setup/versions.sh`) | The patch for the previous base, 0662fac, unchanged. |
 | `previous/pr423-dflash2-rejection-sampling-0662fac.patch` | only with `WITH_PR423=1`, on the previous base | Open upstream PR #423 by Rafa (@rafatxf), with its review fixes. |
 
-`live-1012` is our local work branch; it isn't published, and these patch files are its published form. The combined
+`live-1013` is our local work branch; it isn't published, and these patch files are its published form. The combined
 patch is the one that's guaranteed: it's what we compile and validate, and it touches only source, docs and three tests
 (`test_gemv32.py`, `test_greedy_equal.py`, `tests/kernels/attention/test_paged_decode_layout.py`). The files in
-`features/` are the commits of `live-1012` as `git format-patch` output. Applied in order with `git am` on 9cc3bd1 they
-give the same tree as the combined patch (checked 2026-10-12).
+`features/` are the commits of `live-1013` as `git format-patch` output. Applied in order with `git am` on 0f685aa they
+give the same tree as the combined patch (checked 2026-10-13).
 
 1. `0001` to `0003`, `0006`: gfx12 WMMA GEMV for 2-8 rows (draft verification), then 16 and 32 rows (two M tiles), with
    the 32-row accumulator kept in registers (`EXL3_GEMV_WMMA`).
@@ -28,16 +28,18 @@ give the same tree as the combined patch (checked 2026-10-12).
 7. `0014`, `0015`: a multi-stage split-decode tile that doesn't fit in shared memory falls back to one stage (it only
    happened with `EXL3_DEC_STAGES=2` at 16 q heads per kv head, not on Qwen3.8), and the launch pick is keyed on the
    single-split variant.
-8. `0016`, `0017`: the DeltaNet scan keeps each thread's slice of the recurrent state in registers across the tokens of a
-   pass. Upstream's v1.6.1 replay (staged inputs, no per-token snapshots) read and wrote the state in memory for every
-   token, which made the 8-token verify's DeltaNet layers 27% slower here; with this they're back to the old speed and
-   the output is bit-identical (`notes/measurements.md`).
-9. `0018`: a fix for upstream's Mamba2 replay launch (a v split it has no kernel for). Qwen3.8 doesn't use it.
+
+Upstream since 0f685aa: our DeltaNet scan change (each thread keeps its slice of the recurrent state in registers across
+the tokens of a pass, which made the 8-token verify's DeltaNet layers a fifth faster here) and the Mamba2 replay launch
+fix. We filed them as issues ([#505](https://github.com/turboderp-org/exllamav3/issues/505),
+[#506](https://github.com/turboderp-org/exllamav3/issues/506)) and turboderp merged both the same day; the kernel code
+is the same as ours was. On the 9cc3bd1 base they were `0016` to `0018`, which are in this repository's history
+(61ed7e2).
 
 What the previous base's patch had and this one doesn't:
 
 - Our DeltaNet accepted-input replay (`EXL3_GDN_REPLAY`) and its test: upstream's v1.6.1 replay does the same job and is
-  always on, and `0016` gives it our speed. `EXL3_GDN_REPLAY` is now ignored.
+  always on, and since 0f685aa it has our speed. `EXL3_GDN_REPLAY` is now ignored.
 - HIP graph re-instantiation (`EXL3_GRAPH_REINST`): upstream turns graphs off on ROCm by default, so it isn't needed.
   `EXL3_GRAPH_REINST` is ignored unless you build the previous base.
 - The opt-in `EXL3_DRAFT_ROW_BUDGET` (off by default and slower) and DFlash2 row pruning for short drafts, which clashed

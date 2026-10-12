@@ -1,7 +1,7 @@
-From eea50b1b9834feaa4a9965f3347d3123d07b6f5b Mon Sep 17 00:00:00 2001
+From 479e14dcc955b21b86513b39de04a2e5bd367736 Mon Sep 17 00:00:00 2001
 From: local <local@localhost>
 Date: Tue, 6 Oct 2026 13:29:30 +0530
-Subject: [PATCH 05/18] Add GPU-owner tests for the 32-row GEMV and bs1 greedy
+Subject: [PATCH 05/15] Add GPU-owner tests for the 32-row GEMV and bs1 greedy
  equality
 
 test_gemv32.py (adapted from wt-tree's test_gemv16.py) checks rows 1-32 against

@@ -26,7 +26,7 @@ tested on one machine:
 | GPU | AMD RX 9070 XT, 16 GB (gfx1201) |
 | OS | Fedora 44, kernel 7.2 |
 | ROCm | system ROCm 7.1.1 (Fedora packages) to build; PyTorch 2.13.0 + ROCm 7.2 wheels to run |
-| Upstream | ExLlamaV3 `dev` 9cc3bd1 (v1.6.1 plus the next day's commits), TabbyAPI `main` 2fd6cc7 |
+| Upstream | ExLlamaV3 `dev` 0f685aa (v1.6.1 plus two days of commits), TabbyAPI `main` 2fd6cc7 |
 
 ## What we added on top of upstream
 
@@ -35,9 +35,10 @@ tested on one machine:
 - **Batched verification up to 32 rows:** the WMMA GEMV and a fused C++ MLP path keep 16- and 32-row verify batches
   on the fast path.
 - **Attention tuned for Qwen's grouped heads, plus a 4-bit cache kernel:** faster decode at long context.
-- **DeltaNet scan with its state in registers:** upstream's DeltaNet replay (v1.6.1, about 1 GB less VRAM, which is
-  what makes 128k fit next to the draft model) re-read and re-wrote the recurrent state for every drafted token; keeping
-  it in registers cuts the DeltaNet layers' time per verify step by a fifth (15.0 to 12.1 ms), with bit-identical output.
+- **DeltaNet scan with its state in registers (now upstream):** upstream's DeltaNet replay (v1.6.1, about 1 GB less
+  VRAM, which is what makes 128k fit next to the draft model) re-read and re-wrote the recurrent state for every drafted
+  token; keeping it in registers cuts the DeltaNet layers' time per verify step by a fifth (15.0 to 12.1 ms), with
+  bit-identical output. turboderp merged it into `dev` (0f685aa, from our issue #505), so it's no longer in our patch.
 - **3.0 bpw DFlash2 draft (requant script):** 0.5 GB smaller than the 5.0 bpw quant, same speed.
 - **Setup scripts:** pinned versions, missing headers fetched without sudo, one command each to build and serve.
 

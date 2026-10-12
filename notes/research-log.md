@@ -5,8 +5,9 @@ point at this repo's layout. Dates are 2026. Numbers are from one RX 9070 XT (16
 `wt-replay` were local work branches. Most of this was on exllamav3 f1cf869 and TabbyAPI f07131c (with a since
 superseded TabbyAPI patch); the work was then ported to exllamav3 0662fac (`patches/previous/`: the WMMA GEMV, graph
 re-instantiation, GQA decode attention with Q4W, the review fixes, the DeltaNet replay and the batching series), and
-on 2026-10-12 to 9cc3bd1 (`patches/exllamav3-rdna4.patch` and `patches/features/`), where upstream's own replay and
-graphs-off default replace ours; the last two sections cover those ports. The 16-row GEMV below later grew into the
+on 2026-10-12 to 9cc3bd1, where upstream's own replay and graphs-off default replace ours, and on 2026-10-13 to
+0f685aa (`patches/exllamav3-rdna4.patch` and `patches/features/`), which has our DeltaNet scan change; the last three
+sections cover those ports. The 16-row GEMV below later grew into the
 batching series (16- and 32-row GEMV); see `notes/measurements.md`. The adaptive draft length, tree fallback and Q4P
 experiments are not in this repo. The notes between the 16-row GEMV and the ports skip the batching work, which is
 written up in `notes/measurements.md`.
@@ -187,7 +188,7 @@ opt-in `EXL3_DRAFT_ROW_BUDGET` (it conflicted with upstream's new hybrid draft m
 Short-context speed and quality come out even and 64k is unsettled, so the recipe stays on 0662fac until the rebased
 build has had a long soak under load and more 64k runs.
 
-## Upstream dev of 2026-10-12 (adopted: the current base)
+## Upstream dev of 2026-10-12 (adopted; the base until 0f685aa)
 
 The same port moved to `dev` 9cc3bd1 (v1.6.1 plus the next day's commits). Upstream fixed the `staging_pages` bug itself
 (3a513ac, the same one-line change), so we dropped ours; everything else cherry-picked cleanly.
@@ -223,3 +224,22 @@ The same port moved to `dev` 9cc3bd1 (v1.6.1 plus the next day's commits). Upstr
   fit in `long` (14.70 GB at 127.8k); concurrent MTP requests are untested, so both stay at one.
 - PR #423 isn't ported: upstream rewrote `sample_from_state` for tensor parallelism, and the PR relied on our row
   pruning. It stays available on the previous base.
+
+## Upstream dev of 2026-10-13 (adopted: the current base)
+
+We filed the DeltaNet scan change and the Mamba2 replay launch fix as issues rather than PRs (#505, #506), with the
+measurements and the patch linked. turboderp merged both into `dev` the same day (0f685aa), with the same kernel code;
+only comments differ (upstream kept the old operand comments and has no note on the Mamba2 launch). So the port moved to 0f685aa and dropped `0016` to `0018`;
+the other 15 commits cherry-picked cleanly.
+
+- Upstream's other changes since 9cc3bd1 are the disk cache tier (write-behind during long prefills, an idle flush in
+  steps), tensor-parallel DFlash2 top-k, TP fixes, the DSA top-k workspace and conversion wildcards. TabbyAPI doesn't
+  configure the disk tier and TP isn't used; the compute kernels this setup runs are unchanged, though some shared
+  Python code changed (generator and page-table bookkeeping, a refactor of the DFlash2 selector).
+- Checks against the 9cc3bd1 build (`notes/measurements.md`, "Current base"): greedy output identical on all four test
+  prompts, PPL 7.0487 on both, kernel tests pass (including upstream's new Mamba2 replay test), and the bs1/bs3
+  near-tie at token 91 of one prompt is the same as before. The API A/B was even on code and prose; that night's
+  long-context runs spread too widely (96-124 tok/s at 64k for one build) to say more than that.
+- Soak and quality: GPQA Diamond (198, `medium` + anti-spiral, 3 at a time) through the live server on 0f685aa:
+  164/198 (158 on 9cc3bd1, 160 on the previous base), within the run-to-run spread. No server errors, VRAM flat.
+

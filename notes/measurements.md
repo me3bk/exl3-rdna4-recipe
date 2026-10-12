@@ -8,7 +8,9 @@ the known limitations. The scripts are in `bench/` (see `bench/README.md`); the 
 ## Profiles
 
 Decode speed is greedy code through the API (`bench/context_bench.py`), one request at a time, at the prompt
-length shown. Rows marked "current base" are on 9cc3bd1; the previous base is 0662fac and the old base f1cf869.
+length shown. Rows marked "current base" were measured on 9cc3bd1 with our DeltaNet scan patch, which has the same
+kernels as the 0f685aa build the recipe uses now (see "Current base"); the previous base is 0662fac and the old base
+f1cf869.
 
 | Script | Draft | Context | DeltaNet replay | Peak VRAM | Decode |
 |---|---|---|---|---|---|
@@ -48,17 +50,27 @@ thinks about 5x longer on those questions (see "Accuracy: GPQA Diamond" below).
 
 ## Results
 
-All numbers are from the one RX 9070 XT, measured on 5-12 October 2026 with the scripts in `bench/`. The main model
+All numbers are from the one RX 9070 XT, measured on 5-13 October 2026 with the scripts in `bench/`. The main model
 is turboderp's plain 3.0 bpw quant except in "Current base" and "Self-calibrated 3.0 bpw" below and the rows marked SC H4 (the current
 default, about 3% slower on greedy code; that section). The batching section, the self-calibrated comparison and rows
 marked "new base" are on exllamav3 0662fac + our patches (the previous base) and TabbyAPI 2fd6cc7; "Current base"
-is on 9cc3bd1, the one the recipe builds now; the rest are on the old base (exllamav3 f1cf869 + the single-request
+is on 9cc3bd1 (the recipe now builds 0f685aa, with the same kernels); the rest are on the old base (exllamav3 f1cf869 + the single-request
 patches, TabbyAPI f07131c). Context sizes like "80k" mean the server's `max_seq_len`/`cache_size` (80k = 81,920
 tokens).
 
 ### Current base (since 2026-10-12)
 
-The recipe now builds exllamav3 `dev` 9cc3bd1 (v1.6.1 plus the next day's commits) with our patches ported onto it
+Since 2026-10-13 the recipe builds `dev` 0f685aa. turboderp merged our DeltaNet scan change and the Mamba2 replay fix
+there (#505, #506), with the same kernel code as our `0016` and `0018`, so our patch is down to the other 15 commits;
+the rest of what came in after 9cc3bd1 is the disk cache tier, tensor parallelism, a DSA top-k workspace fix and
+conversion. The compute kernels this setup uses are unchanged and the disk tier and TP paths aren't used, though some
+shared Python code changed (generator and page-table bookkeeping, a refactor of the DFlash2 selector). The numbers below were measured on 9cc3bd1 with our patches. Checks of the 0f685aa build against
+it (2026-10-13): greedy output token-identical (4 x 400 tokens with DFlash2), PPL 7.0487 on both, the recurrent and
+attention kernel tests pass (884 and 204, including upstream's new Mamba2 replay test), and a 3-round API A/B came out
+even (code 152.4 vs 152.6 tok/s, prose 60.7 vs 60.0; the long-context runs that night spread too widely to compare,
+96-124 tok/s at 64k for the same build).
+
+The 2026-10-12 port was to exllamav3 `dev` 9cc3bd1 (v1.6.1 plus the next day's commits), with our patches ported onto it
 (`patches/README.md`). Rows elsewhere in this file marked "new base", the batching section and the self-calibrated comparison
 are on the previous base, 0662fac; the rest are on the old base (f1cf869). Same SC H4 model, same 128k / 3-slot server config and TabbyAPI 2fd6cc7. A/B through the API,
 2026-10-12, three rounds alternating which build ran first; medians, tok/s (`bench/bench_api.py` 3x per round,
@@ -235,13 +247,17 @@ All 198 questions, 3.0 bpw, `medium` + anti-spiral, same sampling, through the s
 | Pass 2 | 81.8% (162/198) | 1 |
 | SC H4 quant (2026-10-09, see below) | 80.8% (160/198) | 4 |
 | SC H4 quant, current base (2026-10-12) | 79.8% (158/198) | 4 |
+| SC H4 quant, current base on 0f685aa (2026-10-13) | 82.8% (164/198) | 5 |
 
 So about 81% on the full set; the first 50 questions happen to be easier than average. Both SC H4 runs answered 147
 questions correctly and both missed 27; 11 and 13 went the other way, about the spread we see between two sampled passes
 at temperature 1.0 (the two passes of the plain quant differ by 3), though different builds can contribute too. The current
 base's run took 6% longer in total because its answers were 6% longer; per request it produced the same characters per
 second (176.9 vs 177.2). It was also a 92-minute soak of the live server: VRAM rose 105 MB in the first 10 minutes and
-13 MB in the 82 after, with no errors. Published results on all
+13 MB in the 82 after, with no errors. The 0f685aa build's run (164) is within the same spread: against the 9cc3bd1
+build, 145 questions were right in both and 19 and 13 went the other way. Its server ran 88 minutes without errors,
+VRAM between 15.2 and 16.1 GB with no upward drift (16.09 GB at 10 minutes, 15.55 at the end); the client was
+interrupted once at question 85 and resumed. Published results on all
 198 questions (ISTA, settings not identical to ours): BF16 89.9%, UD-IQ3_S 89.9%, UD-Q2_K_XL 86.9%.
 
 To see how much of that gap is the `medium` effort, we asked the 48 questions that either pass got wrong again, at
@@ -406,10 +422,11 @@ rows a short draft doesn't use. Effect, through the API: 4 requests at once go f
 (see Batching above). The DFlash2 row skipping and the opt-in `EXL3_DRAFT_ROW_BUDGET` (off by default because it was
 slower) were only in the previous base's patch; they clashed with upstream's new hybrid draft mode.
 
-**DeltaNet scan in registers** (current base, `0016`). Upstream's scan reads and writes the recurrent state in memory
-for every token of a pass; each thread now keeps its slice in registers and writes it once. GatedDeltaNet 15.0 -> 12.1
-ms per verify step, bit-identical output (see "Current base" above). `0018` fixes upstream's Mamba2 replay launch, which
-picked a v split that Mamba2 has no kernel for (Qwen3.8 doesn't use Mamba2 layers).
+**DeltaNet scan in registers** (upstream since 0f685aa; `0016` on 9cc3bd1). Upstream's scan read and wrote the
+recurrent state in memory for every token of a pass; each thread now keeps its slice in registers and writes it once. GatedDeltaNet 15.0 -> 12.1
+ms per verify step, bit-identical output (see "Current base" above). `0018` fixed upstream's Mamba2 replay launch, which
+picked a v split that Mamba2 has no kernel for (Qwen3.8 doesn't use Mamba2 layers). We filed both as issues and
+turboderp merged them (#505, #506).
 
 **Split-decode stage fallback** (current base, `0014`, `0015`). With `EXL3_DEC_STAGES=2` and the Q4W kernel, the
 128-row tile at head_dim 256 (16 q heads per kv head, an 8-token verify) needs 67.5 KB of shared memory, more than the 64
@@ -466,8 +483,8 @@ projections at ~25%. A token takes ~1,250-1,450 kernel launches.
 ## Known limitations
 
 - Most single-request tables were measured on the old base (exllamav3 f1cf869, TabbyAPI f07131c); the batching results
-  and the "new base" rows are on the previous base (0662fac). Only "Current base", the profile rows and GPQA row marked
-  current base were measured on the current one (9cc3bd1).
+  and the "new base" rows are on the previous base (0662fac). Only "Current base", the profile rows and GPQA rows marked
+  current base were measured on the current one (9cc3bd1 with our scan patch, or 0f685aa where it says so).
 - Speculative decoding isn't bit-identical to plain greedy decoding. Every speculative mode, plain DFlash2 included,
   diverged from non-speculative greedy output at the same token (375 of 400) in our test. That comes from the
   multi-row verify's accumulation order, not from the replay code.
@@ -494,7 +511,7 @@ projections at ~25%. A token takes ~1,250-1,450 kernel launches.
 setup/     versions.sh (pinned commits and patch files), lib.sh, fetch_deps.sh, make_venv.sh, requirements*.txt,
            build_exllamav3.sh, install_tabby.sh, download_models.sh, requant_draft.sh, env.sh, regen_patches.sh
 serve/     run_tabby.sh, run_tabby_long.sh, run_tabby_xl.sh, stop_tabby.sh, config.example.yml, open-webui.md
-patches/   exllamav3-rdna4.patch, features/ (the same as 18 commits), previous/ (0662fac base and PR #423)
+patches/   exllamav3-rdna4.patch, features/ (the same as 15 commits), previous/ (0662fac base and PR #423)
 bench/     speed, context, batching, GPQA and kernel tests (bench/README.md)
 kernels/   standalone HIP experiments: WMMA layout probe, HIP graph repro, hand-written attention
 notes/     measurements.md (this file), research-log.md (the working notes), reviews.md (the code reviews)

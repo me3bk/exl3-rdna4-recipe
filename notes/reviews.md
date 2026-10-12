@@ -18,8 +18,10 @@ Where the findings ended up:
 - Batching series: fixed in the series itself (two rounds); the open items are test-only.
 - PR #423 (upstream, not ours): the four findings below were fixed upstream (ffd18f5); it ships as an optional
   patch, off by default.
-- Port to 9cc3bd1 (the current base), 2026-10-12: the findings of the rebase review and the three reviews below are
-  fixed in `patches/features/` (`0013`, `0015`, `0017`, `0018`).
+- Port to 9cc3bd1, 2026-10-12: the findings of the rebase review and the three reviews below are fixed in
+  `patches/features/` (`0013`, `0015`). The Mamba2 launch fix (`0018` on 9cc3bd1) went upstream with the scan change
+  (0f685aa, the current base); the operand-comment fix (`0017`) didn't, so upstream's comments still describe the
+  per-token round trip.
 
 ## Review of d6a4353 (RDNA4 patches), 2026-10-06
 
