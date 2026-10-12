@@ -1,7 +1,7 @@
-From 367232705c052ad09c94086fafbffcf5ceee8db1 Mon Sep 17 00:00:00 2001
+From 786ffeda413c3916e9dc5cc1241e23c24985fb39 Mon Sep 17 00:00:00 2001
 From: local <local@localhost>
 Date: Tue, 6 Oct 2026 13:16:27 +0530
-Subject: [PATCH 07/19] ROCm: gfx12 WMMA multi-row GEMV up to 16 rows
+Subject: [PATCH 02/18] ROCm: gfx12 WMMA multi-row GEMV up to 16 rows
 
 A batched speculative verify (bsz 2 x 8 rows) is 16 rows per linear, past the
 multi-row GEMV's 8-row limit, so every linear in the verify and in the
@@ -24,6 +24,7 @@ the device.
 - The 8-row specialization keeps its scratch size and accumulator count.
 
 Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>
+(cherry picked from commit 367232705c052ad09c94086fafbffcf5ceee8db1)
 ---
  doc/env_vars.md                               | 15 +++--
  exllamav3/exllamav3_ext/quant/exl3_gemm.cu    |  8 +--
@@ -32,10 +33,10 @@ Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>
  4 files changed, 51 insertions(+), 33 deletions(-)
 
 diff --git a/doc/env_vars.md b/doc/env_vars.md
-index 974885c..25af189 100644
+index ed4de555..5a74b692 100644
 --- a/doc/env_vars.md
 +++ b/doc/env_vars.md
-@@ -291,14 +291,21 @@ forces shuffle extraction, `1` forces shared-memory staging. Testing only.
+@@ -269,14 +269,21 @@ forces shuffle extraction, `1` forces shared-memory staging. Testing only.
  
  ### `EXL3_GEMV_WMMA` (ROCm gfx1200 / gfx1201; default: `0`)
  
@@ -62,11 +63,11 @@ index 974885c..25af189 100644
  
  k-tiles decoded per WMMA batch in the `EXL3_GEMV_WMMA` kernel: `1`, `2` or `4`.
 diff --git a/exllamav3/exllamav3_ext/quant/exl3_gemm.cu b/exllamav3/exllamav3_ext/quant/exl3_gemm.cu
-index 517ddb7..bdeff7a 100644
+index c909164b..1fab225e 100644
 --- a/exllamav3/exllamav3_ext/quant/exl3_gemm.cu
 +++ b/exllamav3/exllamav3_ext/quant/exl3_gemm.cu
-@@ -190,9 +190,9 @@ int exl3_gemm_gr
-     if (mul1) cb = 2;
+@@ -200,9 +200,9 @@ int exl3_gemm_gr
+     }
  
  #if defined(USE_ROCM)
 -    // RDNA: m = 1..8 take the multi-row fdot2 GEMV (rocm/quant/exl3_gemv_multirow_rdna.cu), in and out of graph
@@ -77,7 +78,7 @@ index 517ddb7..bdeff7a 100644
          && (!half_k || exl3_rocm_half_gemv_enabled()))
      {
          if (exl3_gemv_multirow_try_launch
-@@ -609,9 +609,9 @@ int exl3_mgemm_gr
+@@ -665,9 +665,9 @@ int exl3_mgemm_gr
  
  #if defined(USE_ROCM)
      // RDNA: the plain-launch multi-matrix GEMVs (rocm/quant/exl3_mgemv_rdna.cu, exl3_gemv_multirow_rdna.cu)
@@ -90,7 +91,7 @@ index 517ddb7..bdeff7a 100644
      {
          if (exl3_mgemv_multirow_try_launch
 diff --git a/exllamav3/exllamav3_ext/rocm/quant/exl3_gemv_multirow_rdna.cu b/exllamav3/exllamav3_ext/rocm/quant/exl3_gemv_multirow_rdna.cu
-index 009b253..73f0b36 100644
+index 324d00a8..000d3728 100644
 --- a/exllamav3/exllamav3_ext/rocm/quant/exl3_gemv_multirow_rdna.cu
 +++ b/exllamav3/exllamav3_ext/rocm/quant/exl3_gemv_multirow_rdna.cu
 @@ -1,5 +1,5 @@
@@ -303,7 +304,7 @@ index 009b253..73f0b36 100644
  #undef LAUNCH_MR_K
  #undef LAUNCH_MR_CB
 diff --git a/exllamav3/exllamav3_ext/rocm/quant/exl3_gemv_multirow_rdna.cuh b/exllamav3/exllamav3_ext/rocm/quant/exl3_gemv_multirow_rdna.cuh
-index f4b3b61..57d5c86 100644
+index f4b3b614..57d5c864 100644
 --- a/exllamav3/exllamav3_ext/rocm/quant/exl3_gemv_multirow_rdna.cuh
 +++ b/exllamav3/exllamav3_ext/rocm/quant/exl3_gemv_multirow_rdna.cuh
 @@ -1,7 +1,7 @@

@@ -3,16 +3,17 @@
 # environment, e.g. EXLLAMAV3_GIT_URL=/path/to/local/mirror setup/build_exllamav3.sh
 # (TABBY_URL, without GIT, is the running server's address in the bench scripts; it isn't used here.)
 
-# ExLlamaV3, dev branch. Our patch is `git diff <commit> rdna4-dev-batch-nographs` (our local work branch); see
-# patches/README.md for how to regenerate it.
+# ExLlamaV3, dev branch (v1.6.1 and later). Our patch is `git diff <commit> live-1012` (our local work branch); see
+# patches/README.md for how to regenerate it. The previous base is still available (patches/README.md, "Previous base"):
+#   EXLLAMAV3_COMMIT=0662fac591992c6d5f11d041b1cf2136d62e536d EXLLAMAV3_PATCH=patches/previous/exllamav3-rdna4-0662fac.patch
 EXLLAMAV3_GIT_URL=${EXLLAMAV3_GIT_URL:-https://github.com/turboderp-org/exllamav3}
-EXLLAMAV3_COMMIT=${EXLLAMAV3_COMMIT:-0662fac591992c6d5f11d041b1cf2136d62e536d}
+EXLLAMAV3_COMMIT=${EXLLAMAV3_COMMIT:-9cc3bd15a963f4ec56ef4ab8e4041bbf3986fc09}
 EXLLAMAV3_PATCH=${EXLLAMAV3_PATCH:-patches/exllamav3-rdna4.patch}   # paths are relative to the repo root
 
-# Optional: upstream PR #423 (DFlash2 rejection sampling, by @rafatxf), applied after the main patch.
-# Off by default (patches/README.md). WITH_PR423=1 opts in.
+# Optional: upstream PR #423 (DFlash2 rejection sampling, by @rafatxf), applied after the main patch. Off by default
+# (patches/README.md). Only ported to the previous base so far: WITH_PR423=1 needs the two previous-base settings above.
 WITH_PR423=${WITH_PR423:-0}
-PR423_PATCH=${PR423_PATCH:-patches/optional/pr423-dflash2-rejection-sampling.patch}
+PR423_PATCH=${PR423_PATCH:-patches/previous/pr423-dflash2-rejection-sampling-0662fac.patch}
 
 # TabbyAPI, main branch. 2fd6cc7 accepts ROCm GPUs natively, so no patch. Set TABBY_PATCH to a file to apply one.
 TABBY_GIT_URL=${TABBY_GIT_URL:-https://github.com/theroyallab/tabbyAPI}

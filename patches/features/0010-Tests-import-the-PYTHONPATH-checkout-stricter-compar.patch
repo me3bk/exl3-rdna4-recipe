@@ -1,7 +1,7 @@
-From 11bce813bac191bc33dcdc23ace9c7b55b45d390 Mon Sep 17 00:00:00 2001
+From 70a6db74a9b21f86e0fc6c7fa4f29b92fbd87aec Mon Sep 17 00:00:00 2001
 From: local <local@localhost>
 Date: Tue, 6 Oct 2026 14:26:49 +0530
-Subject: [PATCH 17/19] Tests: import the PYTHONPATH checkout; stricter compare
+Subject: [PATCH 10/18] Tests: import the PYTHONPATH checkout; stricter compare
  and MLP replay checks
 
 - test_greedy_equal.py: Python put the script's own checkout (wt-batch)
@@ -20,13 +20,14 @@ Subject: [PATCH 17/19] Tests: import the PYTHONPATH checkout; stricter compare
   now fails; the old identical-input test could not see it.
 
 Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>
+(cherry picked from commit 11bce813bac191bc33dcdc23ace9c7b55b45d390)
 ---
  test_gemv32.py       | 75 +++++++++++++++++++++++++++++++++++---------
  test_greedy_equal.py | 51 ++++++++++++++++++++++++++----
  2 files changed, 105 insertions(+), 21 deletions(-)
 
 diff --git a/test_gemv32.py b/test_gemv32.py
-index 59431bd..9966452 100644
+index 59431bde..99664527 100644
 --- a/test_gemv32.py
 +++ b/test_gemv32.py
 @@ -11,13 +11,20 @@ Checks, per projection (attention, GDN, MLP, lm_head; --draft adds the DFlash2 f
@@ -147,7 +148,7 @@ index 59431bd..9966452 100644
  
      model = Model.from_config(Config.from_directory(args.model))
 diff --git a/test_greedy_equal.py b/test_greedy_equal.py
-index 55e902b..22d33a6 100644
+index 55e902b5..22d33a69 100644
 --- a/test_greedy_equal.py
 +++ b/test_greedy_equal.py
 @@ -2,7 +2,9 @@

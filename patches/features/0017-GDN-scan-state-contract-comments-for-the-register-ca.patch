@@ -1,0 +1,26 @@
+From 5bcca872f0ee1dba96d2da9a090db301a6e9df4d Mon Sep 17 00:00:00 2001
+From: Parth Thakre <144053824+parth-thakre@users.noreply.github.com>
+Date: Mon, 12 Oct 2026 03:36:02 +0530
+Subject: [PATCH 17/18] GDN scan: state-contract comments for the
+ register-carried scan
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ exllamav3/exllamav3_ext/gdn.cu | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/exllamav3/exllamav3_ext/gdn.cu b/exllamav3/exllamav3_ext/gdn.cu
+index 9158e8eb..7805f4c2 100644
+--- a/exllamav3/exllamav3_ext/gdn.cu
++++ b/exllamav3/exllamav3_ext/gdn.cu
+@@ -455,8 +455,8 @@ struct ScanOperands
+     const bfloat16* qkv;
+     const float* g;
+     const bfloat16* beta;
+-    float* read_state;      // state read by the first token
+-    float* final_state;     // state written by every token and read by all but the first
++    float* read_state;      // state the scan starts from, read once before the first token
++    float* final_state;     // state after the last token, written once (may alias read_state)
+     bfloat16* out;          // nullptr: discard the attention output (replay)
+     const float* D;
+     int steps;

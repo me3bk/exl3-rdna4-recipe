@@ -1,7 +1,7 @@
-From b2ef406d0a800d8d54ef7849adf2e8f01a18c0ab Mon Sep 17 00:00:00 2001
+From eea50b1b9834feaa4a9965f3347d3123d07b6f5b Mon Sep 17 00:00:00 2001
 From: local <local@localhost>
 Date: Tue, 6 Oct 2026 13:29:30 +0530
-Subject: [PATCH 11/19] Add GPU-owner tests for the 32-row GEMV and bs1 greedy
+Subject: [PATCH 05/18] Add GPU-owner tests for the 32-row GEMV and bs1 greedy
  equality
 
 test_gemv32.py (adapted from wt-tree's test_gemv16.py) checks rows 1-32 against
@@ -19,6 +19,7 @@ checks two runs token for token. Prompts stay above 32 tokens, since a
 Both load the model and run kernels; the GPU owner runs them.
 
 Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>
+(cherry picked from commit b2ef406d0a800d8d54ef7849adf2e8f01a18c0ab)
 ---
  test_gemv32.py       | 213 +++++++++++++++++++++++++++++++++++++++++++
  test_greedy_equal.py | 118 ++++++++++++++++++++++++
@@ -28,7 +29,7 @@ Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>
 
 diff --git a/test_gemv32.py b/test_gemv32.py
 new file mode 100644
-index 0000000..59431bd
+index 00000000..59431bde
 --- /dev/null
 +++ b/test_gemv32.py
 @@ -0,0 +1,213 @@
@@ -247,7 +248,7 @@ index 0000000..59431bd
 +    main()
 diff --git a/test_greedy_equal.py b/test_greedy_equal.py
 new file mode 100644
-index 0000000..55e902b
+index 00000000..55e902b5
 --- /dev/null
 +++ b/test_greedy_equal.py
 @@ -0,0 +1,118 @@

@@ -1,49 +1,62 @@
 # Patches
 
-All against ExLlamaV3 `dev` at 0662fac. TabbyAPI needs no patch at 2fd6cc7, which accepts ROCm GPUs natively.
+All against ExLlamaV3 `dev` at 9cc3bd1 (v1.6.1 plus the next day's commits). TabbyAPI needs no patch at 2fd6cc7, which
+accepts ROCm GPUs natively.
 
 | File | Applied by `setup/build_exllamav3.sh` | What |
 |---|---|---|
-| `exllamav3-rdna4.patch` | always | Everything of ours, plus one upstream backport: `git diff 0662fac rdna4-dev-batch-nographs`. |
-| `optional/pr423-dflash2-rejection-sampling.patch` | only with `WITH_PR423=1` (off by default) | Open upstream PR #423 by Rafa (@rafatxf), with its review fixes, applied after ours. |
-| `features/*.patch` | no | The same as its 19 commits, for reading and review. |
+| `exllamav3-rdna4.patch` | always | Everything of ours: `git diff 9cc3bd1 live-1012`. |
+| `features/*.patch` | no | The same as its 18 commits, for reading and review. |
+| `previous/exllamav3-rdna4-0662fac.patch` | only if you select the previous base (`setup/versions.sh`) | The patch for the previous base, 0662fac, unchanged. |
+| `previous/pr423-dflash2-rejection-sampling-0662fac.patch` | only with `WITH_PR423=1`, on the previous base | Open upstream PR #423 by Rafa (@rafatxf), with its review fixes. |
 
-`rdna4-dev-batch-nographs` and `rdna4-dev-pr423` are our local work branches; they aren't published, and these patch
-files are their published form. The combined patch is the one that's guaranteed: it's what we compile and validate, and
-it touches only source, docs and three tests (`test_gdn_replay.py`, `test_gemv32.py`, `test_greedy_equal.py`). The files
-in `features/` are the commits of the `rdna4-dev-batch-nographs` branch as `git format-patch` output. Applied in order
-with `git am` on 0662fac they give the same tree as the combined patch (checked 2026-10-08).
+`live-1012` is our local work branch; it isn't published, and these patch files are its published form. The combined
+patch is the one that's guaranteed: it's what we compile and validate, and it touches only source, docs and three tests
+(`test_gemv32.py`, `test_greedy_equal.py`, `tests/kernels/attention/test_paged_decode_layout.py`). The files in
+`features/` are the commits of `live-1012` as `git format-patch` output. Applied in order with `git am` on 9cc3bd1 they
+give the same tree as the combined patch (checked 2026-10-12).
 
-1. `0001-ROCm-gfx12-WMMA-multi-row-GEMV-EXL3_GEMV_WMMA.patch`: gfx12 WMMA GEMV for 2-8 rows (draft verification).
-2. `0002-ROCm-periodically-re-instantiate-HIP-graphs-...patch`: re-instantiate HIP graphs every 100k node updates
-   (`EXL3_GRAPH_REINST`; `setup/env.sh` sets 1000). Since `0019` it only matters with `EXL3_GRAPHS=1`.
-3. `0003-Split-decode-attention-GQA-grouping-...patch`: whole-GQA-group split-decode attention, `EXL3_DEC_*` tuning and
-   the Q4W kernel.
-4. `0004-Gated-DeltaNet-accepted-input-replay-...patch`: DeltaNet accepted-input replay (`EXL3_GDN_REPLAY=1`).
-5. `0005-Add-test_gdn_replay.py-...patch` and `0006-test_gdn_replay-...patch`: the replay test.
-6. `0007` to `0017`, the batching series:
-   - `0007`, `0008`, `0012`: the WMMA GEMV extended to 16 and then 32 rows (two M tiles), with the 32-row accumulator
-     kept in registers.
-   - `0009`, `0014`: the GatedMLP as a captured graph up to 32 rows (`EXL3_BC_MLP_MAX_ROWS`), graphs keyed by row count
-     and output dtype.
-   - `0015`: LoRA adapters and per-projection controls take the unfused path.
-   - `0010`, `0016`: the opt-in `EXL3_DRAFT_ROW_BUDGET` (off by default; it was slower) and DFlash2 row pruning for
-     short drafts.
-   - `0011`, `0017`: `test_gemv32.py` and `test_greedy_equal.py`.
-   - `0013`: docs.
-7. `0018`: generic wording in the tests' docstrings, comments and one failure message (no logic change).
-8. `0019`: upstream commit 96838c9 by turboderp (2026-10-07), cherry-picked unchanged: HIP graphs off by default on
-   ROCm, `EXL3_GRAPHS=1` to turn them on. Every graphed site, ours included (MLP, DeltaNet replay, attention), then
-   launches its C++ kernel sequence directly: the same kernels in the same order. On this card: same decode speed at 1
-   and 3 requests and the same greedy answers (`notes/measurements.md`).
+1. `0001` to `0003`, `0006`: gfx12 WMMA GEMV for 2-8 rows (draft verification), then 16 and 32 rows (two M tiles), with
+   the 32-row accumulator kept in registers (`EXL3_GEMV_WMMA`).
+2. `0004`, `0008`: the GatedMLP as a captured graph up to 32 rows (`EXL3_BC_MLP_MAX_ROWS`), graphs keyed by row count and
+   output dtype.
+3. `0009`: LoRA adapters and per-projection controls take the unfused path.
+4. `0005`, `0010`, `0011`: `test_gemv32.py` and `test_greedy_equal.py`, and generic wording in the tests.
+5. `0007`: docs.
+6. `0012`, `0013`: our split-decode attention tuning on upstream's dense (query, head) row layout (v1.6.0): `EXL3_DEC_*`
+   overrides, the larger row cap with `EXL3_DEC_GROUP=1`, and the Q4W kernel for the 4-bit cache; tests and docs.
+7. `0014`, `0015`: a multi-stage split-decode tile that doesn't fit in shared memory falls back to one stage (it only
+   happened with `EXL3_DEC_STAGES=2` at 16 q heads per kv head, not on Qwen3.8), and the launch pick is keyed on the
+   single-split variant.
+8. `0016`, `0017`: the DeltaNet scan keeps each thread's slice of the recurrent state in registers across the tokens of a
+   pass. Upstream's v1.6.1 replay (staged inputs, no per-token snapshots) read and wrote the state in memory for every
+   token, which made the 8-token verify's DeltaNet layers 27% slower here; with this they're back to the old speed and
+   the output is bit-identical (`notes/measurements.md`).
+9. `0018`: a fix for upstream's Mamba2 replay launch (a v split it has no kernel for). Qwen3.8 doesn't use it.
 
-The commit messages and the intermediate diffs in `features/` are our work history as it happened, so they mention
-local work branches and checkout names (`wt-tree`, `wt-dev`, `$W/...`); `0018` replaces the ones that ended up in the
-test files' docstrings. They don't affect the combined patch.
+What the previous base's patch had and this one doesn't:
+
+- Our DeltaNet accepted-input replay (`EXL3_GDN_REPLAY`) and its test: upstream's v1.6.1 replay does the same job and is
+  always on, and `0016` gives it our speed. `EXL3_GDN_REPLAY` is now ignored.
+- HIP graph re-instantiation (`EXL3_GRAPH_REINST`): upstream turns graphs off on ROCm by default, so it isn't needed.
+  `EXL3_GRAPH_REINST` is ignored unless you build the previous base.
+- The opt-in `EXL3_DRAFT_ROW_BUDGET` (off by default and slower) and DFlash2 row pruning for short drafts, which clashed
+  with upstream's new hybrid draft mode.
+- turboderp's 96838c9 backport (graphs off on ROCm), which is now upstream.
+
+The commit messages in `features/` are our work history as it happened, so some mention local checkout names
+(`wt-tree`, `$W/...`); `0011` replaces the ones that ended up in the test files' docstrings. They don't affect the
+combined patch.
 
 The fixes from the code reviews (`notes/reviews.md`) are folded into these commits.
 
-## PR #423 (optional, off by default)
+## Previous base
+
+The previous release of this recipe was on 0662fac, and its patch is kept in `previous/`. Select it with
+`EXLLAMAV3_COMMIT=0662fac591992c6d5f11d041b1cf2136d62e536d EXLLAMAV3_PATCH=patches/previous/exllamav3-rdna4-0662fac.patch`
+(and `RESET=1` for an existing checkout). Its 19 per-commit patches are in this repository's history before 2026-10-12.
+
+## PR #423 (optional, off by default, previous base only)
 
 [turboderp-org/exllamav3#423](https://github.com/turboderp-org/exllamav3/pull/423) by Rafa
 ([@rafatxf](https://github.com/rafatxf)) adds speculative (rejection) sampling to DFlash2 for stochastic samplers.
@@ -79,11 +92,16 @@ identical. Each prompt ran once per mode, so that small difference isn't an esta
 rebase, measured as decode speed in the server log rather than end to end, it was 59.3 -> 62.6 tok/s. It stays off by
 default: it changes how sampled requests are verified and gains little on this setup.
 
-`WITH_PR423=1 setup/build_exllamav3.sh` applies it; switching an existing build on or off needs `RESET=1`.
+`WITH_PR423=1 setup/build_exllamav3.sh` applies it (previous base only); switching an existing build on or off needs
+`RESET=1`.
+
+It hasn't been ported to the current base: upstream has since rewritten `DFlash2Model.sample_from_state` (tensor
+parallel), and the PR's sampled branch relied on our row pruning, which the current patch no longer has. To use it,
+select the previous base as above and add `WITH_PR423=1`.
 
 ## Regenerating
 
-`setup/regen_patches.sh` writes all three kinds from a checkout that has the work branches. The exact commands are in
+`setup/regen_patches.sh` writes the combined patch, the per-commit files and mail patches from a checkout that has the work branches. The exact commands are in
 its header. After a port to a newer upstream, regenerate and bump `EXLLAMAV3_COMMIT` in `setup/versions.sh`.
 
 ## Licenses

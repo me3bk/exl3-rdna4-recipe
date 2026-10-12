@@ -4,7 +4,7 @@
 #
 # Environment overrides:
 #   EXLLAMAV3_GIT_URL / EXLLAMAV3_COMMIT / EXLLAMAV3_PATCH   see setup/versions.sh (a local mirror works as the URL)
-#   WITH_PR423=1       also apply patches/optional/pr423-dflash2-rejection-sampling.patch (off by default)
+#   WITH_PR423=1       also apply the PR #423 patch (off by default; previous base only, see setup/versions.sh)
 #   EXLLAMAV3_DIR      checkout location (default: exllamav3/ in the repo root)
 #   RESET=1            discard local changes, other patches and build outputs in EXLLAMAV3_DIR, then patch afresh
 #   VENV               venv to build with and install into (default: .venv/)
@@ -22,7 +22,15 @@ VENV=${VENV:-$ROOT/.venv}
 DEPS_DIR=${DEPS_DIR:-$ROOT/deps}
 
 patches=("$EXLLAMAV3_PATCH")
-[ "$WITH_PR423" = 1 ] && patches+=("$PR423_PATCH")
+if [ "$WITH_PR423" = 1 ]; then
+    case $EXLLAMAV3_COMMIT in
+        0662fac*) ;;
+        *) echo "WITH_PR423=1: the PR #423 patch is only ported to the previous base; set" >&2
+           echo "  EXLLAMAV3_COMMIT=0662fac591992c6d5f11d041b1cf2136d62e536d EXLLAMAV3_PATCH=patches/previous/exllamav3-rdna4-0662fac.patch" >&2
+           exit 1 ;;
+    esac
+    patches+=("$PR423_PATCH")
+fi
 checkout_patched "$EXLLAMAV3_DIR" "$EXLLAMAV3_GIT_URL" "$EXLLAMAV3_COMMIT" "${patches[@]}"
 
 [ -f "$VENV/bin/activate" ] || die "no venv at $VENV; run setup/make_venv.sh first"

@@ -8,18 +8,25 @@ the known limitations. The scripts are in `bench/` (see `bench/README.md`); the 
 ## Profiles
 
 Decode speed is greedy code through the API (`bench/context_bench.py`), one request at a time, at the prompt
-length shown. The first row is the current setup; the others were measured on the old base.
+length shown. Rows marked "current base" are on 9cc3bd1; the previous base is 0662fac and the old base f1cf869.
 
 | Script | Draft | Context | DeltaNet replay | Peak VRAM | Decode |
 |---|---|---|---|---|---|
-| `serve/run_tabby.sh` (default), new base with batching, 4 slots | DFlash2 3.0 bpw, 7 tokens | 128k | on | 16.13 GB | 141 tok/s at 8.1k, 119 at 67.6k, 105.6 at 127.8k |
+| `serve/run_tabby.sh` (default), current base, 3 slots | DFlash2 3.0 bpw, 7 tokens | 128k | on (upstream's) | 16.15 GB (first port, same memory use) | 122.2 at 67.6k, 106.6 at 127.8k (3-round medians) |
+| `serve/run_tabby.sh` (default), previous base with batching, 4 slots | DFlash2 3.0 bpw, 7 tokens | 128k | on | 16.13 GB | 141 tok/s at 8.1k, 119 at 67.6k, 105.6 at 127.8k |
 | `serve/run_tabby.sh` (default), old base, 1 slot | DFlash2 3.0 bpw, 7 tokens | 128k | on (`EXL3_GDN_REPLAY=1`) | 16.13 GB | 149.3 tok/s at 8.1k, 122.3 at 67.6k, 97.6 at 127.8k |
-| `serve/run_tabby_long.sh` | built-in MTP head | 128k | off | not measured | 82.3 at 8.1k, 74.5 at 67.6k, 68.2 at 102.0k |
-| `serve/run_tabby_xl.sh` | built-in MTP head | 160k | off | 16.24 of 16.3 GB | 62.1 at 125.6k, 59.2 at 160.0k |
+| `serve/run_tabby_long.sh`, current base | built-in MTP head | 128k | on (upstream's) | 14.09 GB | 92.3 at 8.1k, 84.0 at 67.6k, 66.0 at 127.8k |
+| `serve/run_tabby_xl.sh`, current base | built-in MTP head | 160k | on (upstream's) | 14.83 GB | 68.7 at 127.8k, 63.6 at 160.0k |
+| `serve/run_tabby_long.sh`, old base | built-in MTP head | 128k | off | not measured | 82.3 at 8.1k, 74.5 at 67.6k, 68.2 at 102.0k |
+| `serve/run_tabby_xl.sh`, old base | built-in MTP head | 160k | off | 16.24 of 16.3 GB | 62.1 at 125.6k, 59.2 at 160.0k |
 
-The default is faster than the MTP profiles at every prompt length we measured. `long` is the conservative option: no
-draft model, and replay off because we haven't tested replay with MTP. `xl` needs the whole card; anything else using
-VRAM (a desktop session on the same GPU, a second model) will push it over.
+The default is faster than the MTP profiles at every prompt length we measured. The MTP profiles need no draft model.
+On the previous and old bases they ran with replay off (it was never tested with MTP there), so every slot kept the
+full DeltaNet history and `xl` needed the whole card. On the current base upstream's replay is always on, MTP included:
+`xl` peaks at 14.83 GB with a full 160k prompt, and `long` with 3 slots peaks at 14.70 GB at 127.8k (one request).
+Both scripts still allow one request at a time, because concurrent requests with MTP drafting are untested. Every
+current-base run recalled the code; greedy code through `bench/bench_api.py` ran at about 101 tok/s and sampled prose
+at 48-51.
 
 Extra arguments go to TabbyAPI, e.g. `serve/run_tabby.sh --max-seq-len 65536 --cache-size 65536`.
 
@@ -41,12 +48,62 @@ thinks about 5x longer on those questions (see "Accuracy: GPQA Diamond" below).
 
 ## Results
 
-All numbers are from the one RX 9070 XT, measured on 5-10 October 2026 with the scripts in `bench/`. The main model
-is turboderp's plain 3.0 bpw quant except in "Self-calibrated 3.0 bpw" below and the rows marked SC H4 (the current
+All numbers are from the one RX 9070 XT, measured on 5-12 October 2026 with the scripts in `bench/`. The main model
+is turboderp's plain 3.0 bpw quant except in "Current base" and "Self-calibrated 3.0 bpw" below and the rows marked SC H4 (the current
 default, about 3% slower on greedy code; that section). The batching section, the self-calibrated comparison and rows
-marked "new base" are on exllamav3 0662fac + our patches and TabbyAPI 2fd6cc7; the rest are on the
-old base (exllamav3 f1cf869 + the single-request patches, TabbyAPI f07131c). Context sizes like "80k" mean the server's `max_seq_len`/`cache_size` (80k = 81,920
+marked "new base" are on exllamav3 0662fac + our patches (the previous base) and TabbyAPI 2fd6cc7; "Current base"
+is on 9cc3bd1, the one the recipe builds now; the rest are on the old base (exllamav3 f1cf869 + the single-request
+patches, TabbyAPI f07131c). Context sizes like "80k" mean the server's `max_seq_len`/`cache_size` (80k = 81,920
 tokens).
+
+### Current base (since 2026-10-12)
+
+The recipe now builds exllamav3 `dev` 9cc3bd1 (v1.6.1 plus the next day's commits) with our patches ported onto it
+(`patches/README.md`). Rows elsewhere in this file marked "new base", the batching section and the self-calibrated comparison
+are on the previous base, 0662fac; the rest are on the old base (f1cf869). Same SC H4 model, same 128k / 3-slot server config and TabbyAPI 2fd6cc7. A/B through the API,
+2026-10-12, three rounds alternating which build ran first; medians, tok/s (`bench/bench_api.py` 3x per round,
+`bench/context_bench.py` 64k and 120k once per round):
+
+| | Previous base (0662fac) | Current base (9cc3bd1) |
+|---|---:|---:|
+| Code, greedy, 600 tokens | 146.3 | 155.0 |
+| Prose, sampled, 600 tokens | 63.5 | 62.6 |
+| Prefill 8k / 30k | 1233 / 1253 | 1225 / 1251 |
+| Decode at 67.6k / 127.8k | 121.7 / 103.9 | 122.2 / 106.6 |
+| Prefill at 67.6k / 127.8k | 1093 / 902 | 1093 / 903 |
+| VRAM after load | 14.63 GB | 14.53 GB |
+
+Prose is sampled, and its draft acceptance swings from run to run (21-28%), so 62.6 vs 63.5 is within the spread
+(57.9-65.9 vs 60.0-67.7). Every 64k and 120k run recalled the buried code. Peak VRAM during the 120k fill was 16.08-16.15
+GB in the earlier rounds of the same port. PPL on the first 580 chunks is 7.0487 (7.0488 on the previous base).
+Greedy output differs from the previous base at near-ties: upstream's dense row layout changes the attention
+accumulation, so 2 of 4 400-token test prompts diverged, at tokens 29 and 91.
+
+The first port was slower: 59 vs 64 tok/s on prose and ~1% on code, on both upstream snapshots we tried (10 and 12
+October). Timing each phase of a verify step (`torch.cuda.synchronize()` around each, greedy code, 8-token verify)
+found it in the DeltaNet layers:
+
+| ms per step | Previous base | First port |
+|---|---:|---:|
+| Whole step | 43.1 | 45.2 |
+| Verify forward (target model) | 36.2 | 38.9 |
+| Draft forward | 2.50 | 2.46 |
+| DeltaNet rewind | 1.45 | 0.88 |
+
+The rest of the step (sampling, acceptance) was 2.9 ms in both. A second run that also synchronized around every module
+(which adds overhead, so its totals don't compare with the table above) put all of the difference in the DeltaNet
+layers; attention (6.1 / 6.2 ms) and the MLPs (18.7 / 18.4) were even:
+
+| ms per step, per-module run | Previous base | First port | Current (with `0016`) |
+|---|---:|---:|---:|
+| GatedDeltaNet, 48 layers | 11.86 | 15.02 | 12.11 |
+| DeltaNet rewind | 1.39 | 0.84 | 0.58 |
+
+Upstream's v1.6.1 replay reads the base state on the first token and then advances a scratch row in memory, reading the
+state twice and writing it once per token. Our previous replay kept the state in registers during the verify. Patch
+`0016` does that for upstream's scan: each thread loads its slice once, carries it across the tokens and writes it once
+at the end. The arithmetic is unchanged and the output bit-identical (4 x 400 greedy tokens with DFlash2, and the same
+kernel instruction counts); the 128-wide verify kernel goes from 64 to 106 VGPRs, without spills.
 
 ### Decode speed by prompt length
 
@@ -177,8 +234,14 @@ All 198 questions, 3.0 bpw, `medium` + anti-spiral, same sampling, through the s
 | Pass 1 | 80.3% (159/198) | 1 |
 | Pass 2 | 81.8% (162/198) | 1 |
 | SC H4 quant (2026-10-09, see below) | 80.8% (160/198) | 4 |
+| SC H4 quant, current base (2026-10-12) | 79.8% (158/198) | 4 |
 
-So about 81% on the full set; the first 50 questions happen to be easier than average. Published results on all
+So about 81% on the full set; the first 50 questions happen to be easier than average. Both SC H4 runs answered 147
+questions correctly and both missed 27; 11 and 13 went the other way, about the spread we see between two sampled passes
+at temperature 1.0 (the two passes of the plain quant differ by 3), though different builds can contribute too. The current
+base's run took 6% longer in total because its answers were 6% longer; per request it produced the same characters per
+second (176.9 vs 177.2). It was also a 92-minute soak of the live server: VRAM rose 105 MB in the first 10 minutes and
+13 MB in the 82 after, with no errors. Published results on all
 198 questions (ISTA, settings not identical to ours): BF16 89.9%, UD-IQ3_S 89.9%, UD-Q2_K_XL 86.9%.
 
 To see how much of that gap is the `medium` effort, we asked the 48 questions that either pass got wrong again, at
@@ -260,7 +323,9 @@ it in VRAM doesn't fit at 128k. Images lower the DFlash2 draft's acceptance rate
 ## What the patches do
 
 `patches/exllamav3-rdna4.patch` is the combined patch the build applies; `patches/features/` has the same work as 18
-commits for reading, and `patches/README.md` explains both. The runtime switches are set in `setup/env.sh`.
+commits for reading, and `patches/README.md` explains both. The runtime switches are set in `setup/env.sh`. Some of the
+work below was only in the previous base's patch (`patches/previous/`), because upstream has since shipped its own
+version; each such item says so.
 
 **gfx12 WMMA multi-row GEMV** (`EXL3_GEMV_WMMA=1`). Speculative decoding verifies 2-8 draft tokens at once, and the
 existing RDNA kernel for that ran at ~1.55x the cost of a 1-row decode. The new kernel decodes the trellis once per
@@ -270,7 +335,8 @@ verify now costs ~1.16x a 1-row decode. In the generator alone, DFlash2 went fro
 82.4 to 90.2; through the API, 136.8 to 145.4. Against the old kernel on the full model: top-1 agreement 100%,
 KL ~3e-5. WMMA only runs on gfx1200/gfx1201.
 
-**HIP graphs off** (upstream 96838c9, backported; `EXL3_GRAPHS=1` turns them back on). ExLlamaV3 captures each decode
+**HIP graphs off** (upstream 96838c9: backported in the previous base, part of the current one; `EXL3_GRAPHS=1` turns
+them back on). ExLlamaV3 captures each decode
 kernel sequence into a HIP graph and patches its arguments before every replay. In this HIP runtime,
 `hipGraphExecKernelNodeSetParams` writes the new arguments into fresh kernel-argument space that isn't reclaimed until
 the graph exec is destroyed (ROCm/rocm-systems#10713; `kernels/graph_setparams_repro.hip` reproduces it), so a server
@@ -321,7 +387,8 @@ runtime, the `EXL3_DEC_*` overrides shared by the eager and graph attention path
 Q4W splits (q_len 1 at 60k: 369 -> 350 µs per layer), and several robustness fixes in the replay code. Greedy output
 and speed unchanged.
 
-**DeltaNet accepted-input replay** (`EXL3_GDN_REPLAY=1`, on in the default profile). Qwen3.8's 48 Gated DeltaNet
+**DeltaNet accepted-input replay** (previous base only, `EXL3_GDN_REPLAY=1`; upstream's v1.6.1 replay replaces it in the
+current base, see "Current base" above). Qwen3.8's 48 Gated DeltaNet
 layers keep a recurrent state, and speculative decoding normally stores a snapshot of it per draft token so it can
 rewind (~0.15 GB per draft token). With replay, the verify pass reads the committed state without writing it and
 records the small post-projection inputs; on acceptance it replays only the accepted prefix. The verify runs inside the
@@ -329,18 +396,28 @@ captured graph and the replay commit is two launches per step. In the `test_gdn_
 greedy tokens), allocated VRAM went from 13.20 to 12.14 GB and decode from 89.3 to 92.4 tok/s, because the verify no
 longer writes 8 state snapshots per layer per step. The state is bit-identical to the snapshot path for every accepted
 length (712 kernel-level comparisons), and the greedy output is identical. That 1.06 GB is what lets the DFlash2
-profile go from 96k to 128k. Run the test from the exllamav3 checkout (`bench/README.md`). The idea comes from
+profile go from 96k to 128k. The test, `test_gdn_replay.py`, ships in the previous base's patch; run it from a checkout built with that patch. The idea comes from
 TensorFold.
 
 **Batching series.** The gfx12 WMMA GEMV runs 16 and 32 rows (two M tiles), so a batched verify of up to 4 requests
 x 8 rows stays on the fast kernel; the GatedMLP runs as a captured graph up to 32 rows, with graphs keyed by row count
 and output dtype; LoRA adapters and per-projection controls take the unfused path; DFlash2 skips the head and selector
 rows a short draft doesn't use. Effect, through the API: 4 requests at once go from 61 to ~240-245 tok/s combined
-(see Batching above).
-`EXL3_DRAFT_ROW_BUDGET` is included but off by default because it was slower.
+(see Batching above). The DFlash2 row skipping and the opt-in `EXL3_DRAFT_ROW_BUDGET` (off by default because it was
+slower) were only in the previous base's patch; they clashed with upstream's new hybrid draft mode.
+
+**DeltaNet scan in registers** (current base, `0016`). Upstream's scan reads and writes the recurrent state in memory
+for every token of a pass; each thread now keeps its slice in registers and writes it once. GatedDeltaNet 15.0 -> 12.1
+ms per verify step, bit-identical output (see "Current base" above). `0018` fixes upstream's Mamba2 replay launch, which
+picked a v split that Mamba2 has no kernel for (Qwen3.8 doesn't use Mamba2 layers).
+
+**Split-decode stage fallback** (current base, `0014`, `0015`). With `EXL3_DEC_STAGES=2` and the Q4W kernel, the
+128-row tile at head_dim 256 (16 q heads per kv head, an 8-token verify) needs 67.5 KB of shared memory, more than the 64
+KB on gfx1201, and the launch failed instead of falling back. It now retries with one stage, and the cached launch pick
+is keyed on the single-split variant, whose footprint differs. Qwen3.8 (6 q heads per kv head) never reaches that tile.
 
 **Optional: PR #423, DFlash2 rejection sampling** (by Rafa, [@rafatxf](https://github.com/rafatxf); off by default,
-`WITH_PR423=1 setup/build_exllamav3.sh` opts in). This is an open upstream PR. For sampled requests, the draft path is
+previous base only, `WITH_PR423=1 setup/build_exllamav3.sh` opts in there). This is an open upstream PR. For sampled requests, the draft path is
 sampled from the drafter's own distribution and accepted with probability min(1, p/q), instead of only accepting draft
 tokens that match a sample from the target. Greedy decoding doesn't use it. Our review found four problems (token masks
 skipped, a top-k tie mismatch, calibration silently off, extra syncs); Rafa fixed all four in a second commit, which
@@ -382,18 +459,20 @@ projections at ~25%. A token takes ~1,250-1,450 kernel launches.
 - A sequential draft-tree fallback, same bench: slower, 118.7 code and 54.2 prose. A real one-pass tree needs
   tree-masked attention and branched DeltaNet state.
 - `EXL3_DRAFT_ROW_BUDGET` (shorter drafts when many requests are active): 194-196 tok/s combined at 4 requests vs
-  ~240-245 without it. It's in the patch as an experimental setting, off by default.
+  ~240-245 without it. It was in the previous base's patch as an experimental setting, off by default.
 - TensorFold itself has no working AMD path (its PR144 gives NaN logits on gfx1201). We ported the replay idea instead.
 - 2.5 bpw to free memory: costs too much accuracy (above).
 
 ## Known limitations
 
 - Most single-request tables were measured on the old base (exllamav3 f1cf869, TabbyAPI f07131c); the batching results
-  and the "new base" rows are on the current one.
+  and the "new base" rows are on the previous base (0662fac). Only "Current base", the profile rows and GPQA row marked
+  current base were measured on the current one (9cc3bd1).
 - Speculative decoding isn't bit-identical to plain greedy decoding. Every speculative mode, plain DFlash2 included,
   diverged from non-speculative greedy output at the same token (375 of 400) in our test. That comes from the
   multi-row verify's accumulation order, not from the replay code.
-- Replay is only tested with the DFlash2 draft. The MTP profiles turn it off.
+- On the previous base, replay was only tested with the DFlash2 draft and the MTP profiles turned it off. On the current
+  base upstream's replay is always on, MTP included; concurrent requests with MTP are untested.
 - The WMMA GEMV only runs on gfx1200/gfx1201. Everything was tested on one RX 9070 XT; the RX 9070 and RDNA3 cards are
   untested.
 - Concurrency is `max_batch_size: 3` by default. 4 works and passed the same long-context gate, but peaks at 16.28 of
@@ -415,7 +494,7 @@ projections at ~25%. A token takes ~1,250-1,450 kernel launches.
 setup/     versions.sh (pinned commits and patch files), lib.sh, fetch_deps.sh, make_venv.sh, requirements*.txt,
            build_exllamav3.sh, install_tabby.sh, download_models.sh, requant_draft.sh, env.sh, regen_patches.sh
 serve/     run_tabby.sh, run_tabby_long.sh, run_tabby_xl.sh, stop_tabby.sh, config.example.yml, open-webui.md
-patches/   exllamav3-rdna4.patch, features/ (the same as 19 commits), optional/ (PR #423)
+patches/   exllamav3-rdna4.patch, features/ (the same as 18 commits), previous/ (0662fac base and PR #423)
 bench/     speed, context, batching, GPQA and kernel tests (bench/README.md)
 kernels/   standalone HIP experiments: WMMA layout probe, HIP graph repro, hand-written attention
 notes/     measurements.md (this file), research-log.md (the working notes), reviews.md (the code reviews)

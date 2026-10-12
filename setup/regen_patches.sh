@@ -8,12 +8,11 @@
 #   setup/regen_patches.sh --features DIR [--repo DIR] BASE BRANCH      one numbered file per commit into DIR
 #   BRANCH=WORKTREE diffs BASE against the working tree (plain mode only).
 #
-# What we ran for the current files, with WORK = an exllamav3 checkout that has branches rdna4-dev-batch-nographs (our work)
-# and rdna4-dev-pr423 (the PR #423 commits rebased on it):
-#   setup/regen_patches.sh --repo "$WORK" 0662fac rdna4-dev-batch-nographs
-#   setup/regen_patches.sh --features patches/features --repo "$WORK" 0662fac rdna4-dev-batch-nographs
-#   setup/regen_patches.sh --format-patch --repo "$WORK" \
-#       --out patches/optional/pr423-dflash2-rejection-sampling.patch rdna4-dev-batch-nographs rdna4-dev-pr423
+# What we ran for the current files, with WORK = an exllamav3 checkout that has branch live-1012 (our work):
+#   setup/regen_patches.sh --repo "$WORK" 9cc3bd15a963f4ec56ef4ab8e4041bbf3986fc09 live-1012
+#   setup/regen_patches.sh --features patches/features --repo "$WORK" 9cc3bd15a963f4ec56ef4ab8e4041bbf3986fc09 live-1012
+# The files in patches/previous/ came from the previous base (0662fac, branches rdna4-dev-batch-nographs and
+# rdna4-dev-pr423) and are kept as they were.
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 source "$ROOT/setup/versions.sh"
@@ -27,7 +26,7 @@ while [ $# -gt 0 ]; do
         --out)  out=$2; shift 2 ;;
         --format-patch) mode=mail; shift ;;
         --features) mode=features; features_dir=$2; shift 2 ;;
-        -h|--help) sed -n '2,16p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,15p' "$0"; exit 0 ;;
         -*) echo "unknown option $1" >&2; exit 2 ;;
         *) break ;;
     esac

@@ -7,7 +7,7 @@ speculative decoding.
 
 ## What you get
 
-- **Code, one request:** ~130 tok/s at short context, ~100 tok/s at 120k.
+- **Code, one request:** ~150 tok/s at short context, ~105 tok/s at 120k.
 - **Prose and conversation** (sampled, temperature ~0.8): ~55-65 tok/s; the draft is accepted less often on prose.
 - **128k-token context.** Prompt processing runs at about 1,300 tok/s for short prompts and 900 at 128k, so a full
   128k prompt takes about 2.5 minutes before the first token.
@@ -26,7 +26,7 @@ tested on one machine:
 | GPU | AMD RX 9070 XT, 16 GB (gfx1201) |
 | OS | Fedora 44, kernel 7.2 |
 | ROCm | system ROCm 7.1.1 (Fedora packages) to build; PyTorch 2.13.0 + ROCm 7.2 wheels to run |
-| Upstream | ExLlamaV3 `dev` 0662fac (plus upstream's later 96838c9, graphs off on ROCm), TabbyAPI `main` 2fd6cc7 |
+| Upstream | ExLlamaV3 `dev` 9cc3bd1 (v1.6.1 plus the next day's commits), TabbyAPI `main` 2fd6cc7 |
 
 ## What we added on top of upstream
 
@@ -35,9 +35,9 @@ tested on one machine:
 - **Batched verification up to 32 rows:** the WMMA GEMV and a fused C++ MLP path keep 16- and 32-row verify batches
   on the fast path.
 - **Attention tuned for Qwen's grouped heads, plus a 4-bit cache kernel:** faster decode at long context.
-- **DeltaNet replay:** about 1 GB less VRAM, which is what makes 128k fit next to the draft model.
-- **HIP graphs off** (upstream's new ROCm default, backported): same speed, and no more crash after hours of serving
-  from a HIP memory leak.
+- **DeltaNet scan with its state in registers:** upstream's DeltaNet replay (v1.6.1, about 1 GB less VRAM, which is
+  what makes 128k fit next to the draft model) re-read and re-wrote the recurrent state for every drafted token; keeping
+  it in registers cuts the DeltaNet layers' time per verify step by a fifth (15.0 to 12.1 ms), with bit-identical output.
 - **3.0 bpw DFlash2 draft (requant script):** 0.5 GB smaller than the 5.0 bpw quant, same speed.
 - **Setup scripts:** pinned versions, missing headers fetched without sudo, one command each to build and serve.
 
@@ -87,7 +87,7 @@ Settings live in `tabbyAPI/config.yml` (copied from `serve/config.example.yml`).
 `serve/open-webui.md` sets up a chat UI.
 
 Two other profiles use the model's built-in MTP head instead of the draft model: `serve/run_tabby_long.sh` (128k, no
-draft model needed) and `serve/run_tabby_xl.sh` (160k, needs the whole GPU). Both are slower than the default.
+draft model needed) and `serve/run_tabby_xl.sh` (160k context). Both are slower than the default.
 
 ## Details and measurements
 
@@ -105,11 +105,11 @@ the benchmark scripts in [bench/README.md](bench/README.md), and the code review
   [incoai/Qwen3.8-27B-DFlash2](https://huggingface.co/incoai/Qwen3.8-27B-DFlash2) (Apache-2.0). Mia-AiLab for the first
   EXL3 quant of it.
 - Rafa ([@rafatxf](https://github.com/rafatxf)) for DFlash2 rejection sampling, exllamav3 PR #423, included as an
-  optional patch (off by default; see `patches/README.md`).
-- TensorFold, for the idea behind the DeltaNet replay.
+  optional patch for the previous base (off by default; see `patches/README.md`).
+- TensorFold, for the idea behind our earlier DeltaNet replay, and HermiG for the replay upstream now ships (#489).
 - The Qwen team, for Qwen3.8-27B.
 
 Our scripts, configs and docs are MIT (`LICENSE`). The patches modify ExLlamaV3 and are under its MIT license. Models
-keep their own licences. Every change here was written by Claude Opus 5.5 and reviewed by GPT-6.1 Sol, except two
-upstream pieces kept unchanged under their authors: turboderp's graphs-off commit (96838c9) and the optional PR #423
-patch by Rafa.
+keep their own licences. Every change here was written by Claude Opus 5.5 and reviewed by GPT-6.1 Sol, except the
+optional PR #423 patch by Rafa (and, in the previous base's patch, turboderp's graphs-off commit 96838c9, kept
+unchanged under his name).

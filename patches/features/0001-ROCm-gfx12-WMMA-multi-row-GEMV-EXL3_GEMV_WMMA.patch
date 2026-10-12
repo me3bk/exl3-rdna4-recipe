@@ -1,7 +1,7 @@
-From d023c38d78442029f1b440d9d7be4db353eb9b50 Mon Sep 17 00:00:00 2001
+From 7ed0ccc5253a646465fb0f6b14b423d54ec08a71 Mon Sep 17 00:00:00 2001
 From: local <local@localhost>
 Date: Tue, 6 Oct 2026 11:55:03 +0530
-Subject: [PATCH 01/19] ROCm: gfx12 WMMA multi-row GEMV (EXL3_GEMV_WMMA)
+Subject: [PATCH 01/18] ROCm: gfx12 WMMA multi-row GEMV (EXL3_GEMV_WMMA)
 
 The fdot2 multi-row cores spend one dot2 per row per weight pair, so an
 8-row call (a DFlash2 verify) costs 1.4-1.9x a 1-row call while reading the
@@ -26,16 +26,17 @@ fp32 accumulation order differs from the fdot2 chain, so results match the
 m == 1 path to rounding, not bit for bit.
 
 Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>
+(cherry picked from commit d023c38d78442029f1b440d9d7be4db353eb9b50)
 ---
  doc/env_vars.md                               |  14 +
  .../rocm/quant/exl3_gemv_multirow_rdna.cu     | 360 ++++++++++++++++++
  2 files changed, 374 insertions(+)
 
 diff --git a/doc/env_vars.md b/doc/env_vars.md
-index e02c346..47e8f7d 100644
+index 4b7deafe..ed4de555 100644
 --- a/doc/env_vars.md
 +++ b/doc/env_vars.md
-@@ -234,6 +234,20 @@ the path wherever its hard constraints allow (testing).
+@@ -267,6 +267,20 @@ the path wherever its hard constraints allow (testing).
  Weight-extraction strategy inside the fp16 GEMV kernel: `-1` picks per bitrate (default), `0`
  forces shuffle extraction, `1` forces shared-memory staging. Testing only.
  
@@ -57,7 +58,7 @@ index e02c346..47e8f7d 100644
  
  Fused int8-activation GEMV for tensors quantized with the mul1 codebook: one cooperative launch
 diff --git a/exllamav3/exllamav3_ext/rocm/quant/exl3_gemv_multirow_rdna.cu b/exllamav3/exllamav3_ext/rocm/quant/exl3_gemv_multirow_rdna.cu
-index 38bbe48..009b253 100644
+index 370c1a9d..324d00a8 100644
 --- a/exllamav3/exllamav3_ext/rocm/quant/exl3_gemv_multirow_rdna.cu
 +++ b/exllamav3/exllamav3_ext/rocm/quant/exl3_gemv_multirow_rdna.cu
 @@ -65,6 +65,8 @@

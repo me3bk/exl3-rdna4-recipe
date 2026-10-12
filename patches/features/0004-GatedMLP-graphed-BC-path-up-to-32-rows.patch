@@ -1,7 +1,7 @@
-From 6115431e3f7900df05c52da0b222eca443300936 Mon Sep 17 00:00:00 2001
+From fbac2589b704c59c0a2eadeda3cb93f72230b947 Mon Sep 17 00:00:00 2001
 From: local <local@localhost>
 Date: Tue, 6 Oct 2026 13:25:05 +0530
-Subject: [PATCH 09/19] GatedMLP: graphed BC path up to 32 rows
+Subject: [PATCH 04/18] GatedMLP: graphed BC path up to 32 rows
 
 BC_GatedMLP::run_bszN took bsz * q_len <= MAX_BSZN (8) rows, so a batched
 verify (2 x 8, 4 x 8) and the DFlash2 draft block at bsz > 1 ran the dense
@@ -22,6 +22,7 @@ up to 8 x 16 rows.
   behaviour), for A/B runs.
 
 Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>
+(cherry picked from commit 6115431e3f7900df05c52da0b222eca443300936)
 ---
  exllamav3/exllamav3_ext/libtorch/mlp.cpp | 22 +++++++++++-------
  exllamav3/exllamav3_ext/libtorch/mlp.h   | 29 ++++++++++++++++--------
@@ -29,7 +30,7 @@ Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>
  3 files changed, 47 insertions(+), 22 deletions(-)
 
 diff --git a/exllamav3/exllamav3_ext/libtorch/mlp.cpp b/exllamav3/exllamav3_ext/libtorch/mlp.cpp
-index ac8c6c4..868ede4 100644
+index 4e80c153..f38cbe6f 100644
 --- a/exllamav3/exllamav3_ext/libtorch/mlp.cpp
 +++ b/exllamav3/exllamav3_ext/libtorch/mlp.cpp
 @@ -19,17 +19,23 @@ void BC_GatedMLP::run_bszN_gr
@@ -73,7 +74,7 @@ index ac8c6c4..868ede4 100644
  
      c10::cuda::CUDAGuard device_guard(x.device());
 diff --git a/exllamav3/exllamav3_ext/libtorch/mlp.h b/exllamav3/exllamav3_ext/libtorch/mlp.h
-index c0a31e1..b733544 100644
+index c0a31e19..b733544d 100644
 --- a/exllamav3/exllamav3_ext/libtorch/mlp.h
 +++ b/exllamav3/exllamav3_ext/libtorch/mlp.h
 @@ -10,6 +10,11 @@ namespace py = pybind11;
@@ -130,7 +131,7 @@ index c0a31e1..b733544 100644
  
      void run_bszN_gr
 diff --git a/exllamav3/modules/mlp.py b/exllamav3/modules/mlp.py
-index 867f3a5..331c572 100644
+index 867f3a55..331c5727 100644
 --- a/exllamav3/modules/mlp.py
 +++ b/exllamav3/modules/mlp.py
 @@ -11,9 +11,17 @@ from ..constants import MAX_MLP_INTERMEDIATE

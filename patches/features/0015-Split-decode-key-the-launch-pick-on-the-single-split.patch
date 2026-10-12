@@ -1,0 +1,85 @@
+From 419a376c3b79e81dde96a71d57e06c43a6c20c78 Mon Sep 17 00:00:00 2001
+From: Parth Thakre <144053824+parth-thakre@users.noreply.github.com>
+Date: Mon, 12 Oct 2026 03:13:43 +0530
+Subject: [PATCH 15/18] Split-decode: key the launch pick on the single-split
+ specialization
+
+The FINAL (single split) kernel has its own shared-memory footprint: at the 128-row Q4W tile with
+EXL3_DEC_STAGES=2 it needs 67.5 KB where the multi-split variant fits in 64 KB. The pick key did not
+carry it, so a pick cached by a multi-split call was reused for a single-split call and the launch
+ran out of resources. The key now records FINAL per candidate (the automatic split count depends on
+the kv tile), and the regression test runs both split orders on a cleared pick cache.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ exllamav3/modules/attention_fn/triton_paged.py     | 14 ++++++++++----
+ .../kernels/attention/test_paged_decode_layout.py  | 12 ++++++++----
+ 2 files changed, 18 insertions(+), 8 deletions(-)
+
+diff --git a/exllamav3/modules/attention_fn/triton_paged.py b/exllamav3/modules/attention_fn/triton_paged.py
+index 103402aa..a926d0fa 100644
+--- a/exllamav3/modules/attention_fn/triton_paged.py
++++ b/exllamav3/modules/attention_fn/triton_paged.py
+@@ -1510,11 +1510,14 @@ def paged_attn_triton_decode(
+         _decode_sm_count[dev] = torch.cuda.get_device_properties(q.device).multi_processor_count
+     target = decode_split_target(_decode_sm_count[dev], q_len)
+ 
++    def split_count(block_n):
++        if num_splits is not None:
++            return num_splits
++        return max(1, min(target // programs, triton.cdiv(max_k_len, 1 * block_n), 128))
++
+     def prepare(block_n):
+         """Split count, partial buffers and the split kernel's argument list for one kv tile."""
+-        splits = num_splits
+-        if splits is None:
+-            splits = max(1, min(target // programs, triton.cdiv(max_k_len, 1 * block_n), 128))
++        splits = split_count(block_n)
+         split_len = triton.cdiv(triton.cdiv(max_k_len, splits), block_n) * block_n
+         if splits > 1:
+             partial_o = torch.empty(programs * splits * block_rows * hd_pad, dtype = torch.float32, device = q.device)
+@@ -1535,8 +1538,11 @@ def paged_attn_triton_decode(
+ 
+     split_kernel = decode_split_kernel_for(qck, qcv, head_dim, hd_pad)
+     with torch.cuda.device(q.device):
++        # The single-split (FINAL) specialization has its own footprint, and the automatic split count depends on
++        # the kv tile, so the key carries FINAL per candidate
++        finals = tuple(split_count(bn) == 1 for _, bn in candidates)
+         pick_key = (head_dim, hd_pad, qck, qcv, q_len, block_rows, h_blocks, bool(causal), window_left >= 0,
+-                    window_right >= 0, has_sinks, num_warps, tuple(candidates), split_kernel.__name__)
++                    window_right >= 0, has_sinks, num_warps, tuple(candidates), finals, split_kernel.__name__)
+         num_stages, block_n = pick_config(
+             q.device, "paged_attn_decode", pick_key, candidates,
+             lambda c: shared_bytes(split_kernel, prepare(c[1])[0],
+diff --git a/tests/kernels/attention/test_paged_decode_layout.py b/tests/kernels/attention/test_paged_decode_layout.py
+index ea5469d8..ab7c0510 100644
+--- a/tests/kernels/attention/test_paged_decode_layout.py
++++ b/tests/kernels/attention/test_paged_decode_layout.py
+@@ -11,6 +11,7 @@ import torch
+ from exllamav3.modules.attention_fn.triton_paged import (
+     decode_row_layout, paged_attn_triton_decode, paged_attn_triton_prefill,
+ )
++from exllamav3.modules.attention_fn import smem
+ from testlib.attention import rand_packed_cache
+ 
+ 
+@@ -71,12 +72,15 @@ def test_decode_layout_vs_prefill(device, head_dim, bits, q_len, group, num_spli
+     torch.testing.assert_close(o_dec, o_pre, rtol = 0, atol = 2e-3)
+ 
+ 
+-@pytest.mark.parametrize("num_splits", [1, 16])
++@pytest.mark.parametrize("split_order", [(1, 16), (16, 1)])
+ @torch.inference_mode()
+-def test_decode_stage_fallback(device, monkeypatch, num_splits):
++def test_decode_stage_fallback(device, monkeypatch, split_order):
+     # EXL3_DEC_STAGES=2 with the Q4W kernel at a 128-row tile (16 q heads per kv head, 8-token verify, head_dim 256)
+-    # overflows 64 KB of shared memory; the launch must drop to single-stage instead of raising NoFittingConfig
++    # overflows 64 KB of shared memory, single-split (FINAL) only on gfx1201; the launch must drop to single-stage
++    # instead of raising, and a pick cached for one split count must not be reused for the other
+     for name, value in (("EXL3_DEC_GROUP", "1"), ("EXL3_DEC_Q4W", "1"), ("EXL3_DEC_STAGES", "2"),
+                         ("EXL3_DEC_BLOCK_N", "16")):
+         monkeypatch.setenv(name, value)
+-    test_decode_layout_vs_prefill(device, head_dim = 256, bits = 4, q_len = 8, group = 16, num_splits = num_splits)
++    monkeypatch.setattr(smem, "_picks", {})
++    for num_splits in split_order:
++        test_decode_layout_vs_prefill(device, head_dim = 256, bits = 4, q_len = 8, group = 16, num_splits = num_splits)

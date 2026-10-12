@@ -18,6 +18,8 @@ Where the findings ended up:
 - Batching series: fixed in the series itself (two rounds); the open items are test-only.
 - PR #423 (upstream, not ours): the four findings below were fixed upstream (ffd18f5); it ships as an optional
   patch, off by default.
+- Port to 9cc3bd1 (the current base), 2026-10-12: the findings of the rebase review and the three reviews below are
+  fixed in `patches/features/` (`0013`, `0015`, `0017`, `0018`).
 
 ## Review of d6a4353 (RDNA4 patches), 2026-10-06
 
@@ -87,3 +89,24 @@ match-the-sample verification while `min_new_tokens` or a banned-string checkpoi
 fused sampler's logit-threshold cutoffs, ties included; no speculative sampling with `dynamic_draft`; the accepted
 length stays on the device. On the GPU: the PR's tests pass, `min_tokens = 64` holds, greedy output is unchanged,
 sampled prose 52.6 -> 53.2 tok/s (one run per mode, not an established speedup).
+
+## Port to 9cc3bd1, 2026-10-12
+
+Rebase review (on the 10 October snapshot, carried over): P1, upstream's fde1b37 passed `staging_pages` to a function
+that doesn't take it (the eager Q4-cache decode raised TypeError; upstream later fixed it the same way in 3a513ac, so
+the port drops ours); P2, `test_gemv32.py` didn't show whether graph replay ran (it now prints `EXL3_GRAPHS`); P3,
+test and doc cleanups. All fixed in `0013`.
+
+Split-decode stage fallback (`0014`): one P2, pre-existing. The launch pick's cache key didn't include the
+single-split (FINAL) variant, whose footprint differs (67,584 vs 65,536 B at the failing shape), so a pick cached by a
+16-split call was reused for a 1-split call and the launch ran out of resources. Fixed in `0015` (the key carries FINAL
+per candidate, the test runs both orders). Round 2: clean; the graph-captured path never compiles a FINAL kernel, so
+it can't hit the same problem.
+
+DeltaNet scan in registers (`0016`): the change itself is correct. Each thread's slice is disjoint, the separate-launch
+speculative path still works because every launch flushes its state, there are no private-scratch or VGPR spills on
+gfx1201 (including the 64-float array of the 256-wide generic kernel), and the 128-wide GDN, KDA and replay kernels have
+the same FMA, multiply and add counts before and after. VGPRs go from 64 to 106 (verify) and 74 to 131 (KDA). Two
+findings: P2, pre-existing upstream, the Mamba2 replay launch used a v split with no matching kernel (fixed in `0018`);
+P3, the operand comments still described the per-token round trip (fixed in `0017`). Round 2: clean, with a ranked list
+of suspects for the open NaN in upstream's spec-rewind e2e test (`notes/research-log.md`).

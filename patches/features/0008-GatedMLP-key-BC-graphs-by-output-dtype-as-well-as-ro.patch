@@ -1,7 +1,7 @@
-From a784aacb6bf7c073408a01a67ad6f54f6f174f7c Mon Sep 17 00:00:00 2001
+From 1202584f30b9c0a5b51f8fd1c5b7576cf342e579 Mon Sep 17 00:00:00 2001
 From: local <local@localhost>
 Date: Tue, 6 Oct 2026 14:25:08 +0530
-Subject: [PATCH 14/19] GatedMLP: key BC graphs by output dtype as well as row
+Subject: [PATCH 08/18] GatedMLP: key BC graphs by output dtype as well as row
  count
 
 BC_GatedMLP kept one captured graph per row count. The down projection's
@@ -23,13 +23,14 @@ and draft MLPs are separate instances with separate graphs. The bug was
 reachable only by direct callers that pass out_dtype.
 
 Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>
+(cherry picked from commit a784aacb6bf7c073408a01a67ad6f54f6f174f7c)
 ---
  exllamav3/exllamav3_ext/libtorch/mlp.cpp | 8 +++++++-
  exllamav3/exllamav3_ext/libtorch/mlp.h   | 9 ++++++---
  2 files changed, 13 insertions(+), 4 deletions(-)
 
 diff --git a/exllamav3/exllamav3_ext/libtorch/mlp.cpp b/exllamav3/exllamav3_ext/libtorch/mlp.cpp
-index 868ede4..5aaecd4 100644
+index f38cbe6f..06bb1b07 100644
 --- a/exllamav3/exllamav3_ext/libtorch/mlp.cpp
 +++ b/exllamav3/exllamav3_ext/libtorch/mlp.cpp
 @@ -104,12 +104,18 @@ void BC_GatedMLP::run_bszN
@@ -53,7 +54,7 @@ index 868ede4..5aaecd4 100644
      if (g.disabled || (!g.ready && !g.ready_to_record))
      {
 diff --git a/exllamav3/exllamav3_ext/libtorch/mlp.h b/exllamav3/exllamav3_ext/libtorch/mlp.h
-index b733544..9945895 100644
+index b733544d..99458959 100644
 --- a/exllamav3/exllamav3_ext/libtorch/mlp.h
 +++ b/exllamav3/exllamav3_ext/libtorch/mlp.h
 @@ -42,9 +42,12 @@ struct BC_GatedMLP

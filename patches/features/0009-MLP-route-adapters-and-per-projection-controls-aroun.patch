@@ -1,7 +1,7 @@
-From 35047cbc8887b4fd8ed688371245e22368a5947b Mon Sep 17 00:00:00 2001
+From e308d8d9ce2a4b15d7c1a9724afa43bb692d9dd5 Mon Sep 17 00:00:00 2001
 From: local <local@localhost>
 Date: Tue, 6 Oct 2026 14:25:08 +0530
-Subject: [PATCH 15/19] MLP: route adapters and per-projection controls around
+Subject: [PATCH 09/18] MLP: route adapters and per-projection controls around
  the fused paths
 
 The graphed BC paths (BC_GatedMLP at 1-32 rows, BC_MLP at bsz 1) and the
@@ -25,12 +25,13 @@ the 32-row change widened it.
 Inference without adapters or controls takes the same paths as before.
 
 Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>
+(cherry picked from commit 35047cbc8887b4fd8ed688371245e22368a5947b)
 ---
  exllamav3/modules/mlp.py | 47 +++++++++++++++++++++++++++++++++++++---
  1 file changed, 44 insertions(+), 3 deletions(-)
 
 diff --git a/exllamav3/modules/mlp.py b/exllamav3/modules/mlp.py
-index 331c572..de6fff5 100644
+index 331c5727..de6fff58 100644
 --- a/exllamav3/modules/mlp.py
 +++ b/exllamav3/modules/mlp.py
 @@ -22,6 +22,35 @@ MAX_BSZN = 8  # must match MAX_BSZN in exllamav3_ext/libtorch/mlp.h and block_sp

@@ -1,0 +1,122 @@
+From 9cbfdce7f3fa84b7e68e6dc7734f265ff1525a0d Mon Sep 17 00:00:00 2001
+From: Parth Thakre <144053824+parth-thakre@users.noreply.github.com>
+Date: Sat, 10 Oct 2026 20:49:12 +0530
+Subject: [PATCH 13/18] Tests and docs after the rebase: layout override
+ coverage, graph mode in the MLP check, greedy metadata
+
+- test_paged_decode_layout: default-layout assertions clear EXL3_DEC_GROUP; new override case
+  (64 / 128 rows, and groups that still split past 128).
+- test_gemv32: section 5 prints EXL3_GRAPHS and says when it checks the direct C++ path rather
+  than capture / replay (ROCm defaults graphs off).
+- test_greedy_equal: no EXL3_GDN_REPLAY / EXL3_DRAFT_ROW_BUDGET (no readers left); the metadata
+  records the WMMA / attention / graph settings; cross-tree equality qualified.
+- env_vars.md: EXL3_DEC_GROUP gives one program per kv head only while q_len x group <= 128.
+
+Reviewed with GPT-6.1 Sol (Codex).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ doc/env_vars.md                                   |  3 ++-
+ test_gemv32.py                                    |  5 ++++-
+ test_greedy_equal.py                              | 10 ++++++----
+ .../kernels/attention/test_paged_decode_layout.py | 15 ++++++++++++++-
+ 4 files changed, 26 insertions(+), 7 deletions(-)
+
+diff --git a/doc/env_vars.md b/doc/env_vars.md
+index bd4d0673..4a741674 100644
+--- a/doc/env_vars.md
++++ b/doc/env_vars.md
+@@ -54,7 +54,8 @@ swallowed. Set to `0` to disable the path entirely.
+ Split-decode attention, graph-captured and eager: a program takes up to 32 of a kv head's
+ (query position, GQA head) rows (`decode_row_layout`), so a verify step with more rows than that
+ (q_len 8 with a group of 6 is 48) still reads and dequantizes each K/V tile in two programs. `1`
+-raises the cap to 128 rows, one program per kv head for every q_len the kernel takes, and, unless
++raises the cap to 128 rows: one program per kv head while q_len x group <= 128 (every q_len up to
++16 for a group of 6 or 8; larger groups still split), and, unless
+ `EXL3_DEC_SPLIT_MULT` is set, aims for 8 (single-token) or 4 (multi-token) programs per CU
+ instead of 2. Tuned on gfx1201.
+ 
+diff --git a/test_gemv32.py b/test_gemv32.py
+index f0449d00..8074f115 100644
+--- a/test_gemv32.py
++++ b/test_gemv32.py
+@@ -175,7 +175,10 @@ def check_bc_mlp(model, args):
+     assert mlps, "no GatedMLP with a BC graph"
+     mlp = mlps[0]
+     limit = getattr(mlp_mod, "_bc_mlp_max_rows", mlp_mod.MAX_BSZN)
+-    print(f"\n5. graphed BC GatedMLP ({mlp.key}), Python row limit {limit}, module out_dtype {mlp.out_dtype}")
++    graphs = os.environ.get("EXL3_GRAPHS", "unset")
++    print(f"\n5. graphed BC GatedMLP ({mlp.key}), Python row limit {limit}, module out_dtype {mlp.out_dtype}, "
++          f"EXL3_GRAPHS {graphs}" + ("" if graphs == "1" else " (ROCm default off: no capture / replay, this checks the "
++                                     "direct C++ path; run again with EXL3_GRAPHS=1 for replay)"))
+     assert limit >= 32, "this checkout's GatedMLP BC limit is below 32 rows (EXL3_BC_MLP_MAX_ROWS set?)"
+     set_wmma(True, 4)
+     dev = mlp.device
+diff --git a/test_greedy_equal.py b/test_greedy_equal.py
+index 42cd747c..065bf12e 100644
+--- a/test_greedy_equal.py
++++ b/test_greedy_equal.py
+@@ -6,7 +6,7 @@ then --compare the two files: every prompt must match token for token. exllamav3
+ PYTHONPATH entry (checked; this script's own directory is dropped from sys.path), and --compare requires
+ both files to hold this script's full prompt set.
+ 
+-  source setup/env.sh (from the recipe); export EXL3_GDN_REPLAY=1
++  source setup/env.sh (from the recipe)
+   PYTHONPATH=/path/to/exllamav3-baseline python test_greedy_equal.py --out /tmp/greedy_baseline.json
+   PYTHONPATH=/path/to/exllamav3-rdna4    python test_greedy_equal.py --out /tmp/greedy_rdna4.json
+   python test_greedy_equal.py --compare /tmp/greedy_baseline.json /tmp/greedy_rdna4.json
+@@ -110,8 +110,9 @@ def main():
+ 
+     prompts = PROMPTS
+     # The system prompt keeps every prompt above 32 tokens: a 9..32-token prefill now takes the WMMA GEMV
+-    # (before the batching series: the cooperative GEMM), which rounds differently by design. Decode / verify at bs1 (8 rows) runs
+-    # the same kernels in both trees, so with longer prompts the outputs must match exactly
++    # (before the batching series: the cooperative GEMM), which rounds differently by design. Between two trees
++    # whose decode / verify at bs1 (8 rows) runs the same kernels, the outputs must then match exactly. Across
++    # kernel changes (e.g. the dense-row split-decode attention), expect divergences at near-ties only
+     system = ("Think efficiently. Work through the problem once, carefully. If you notice yourself re-deriving "
+               "the same result, second-guessing a conclusion you already checked, or cycling between options, "
+               "stop and commit to the best-supported answer. A confident best answer beats an unfinished analysis.")
+@@ -143,7 +144,8 @@ def main():
+     wall = time.time() - t0
+     n = sum(len(v) for v in results.values())
+     meta = (f"{os.path.dirname(exllamav3.__file__)}, bsz {args.bsz}, draft {args.draft_tokens}, "
+-            f"budget {os.environ.get('EXL3_DRAFT_ROW_BUDGET', 'unset')}, {n} tokens in {wall:.1f}s")
++            + ", ".join(f"{k} {os.environ.get(k, 'unset')}" for k in ("EXL3_GEMV_WMMA", "EXL3_DEC_GROUP", "EXL3_DEC_Q4W", "EXL3_GRAPHS"))
++            + f", {n} tokens in {wall:.1f}s")
+     json.dump({"meta": meta, "prompts": prompts, "ids": [results[i] for i in range(len(prompts))]},
+               open(args.out, "w"))
+     print(f"wrote {args.out}: {meta}")
+diff --git a/tests/kernels/attention/test_paged_decode_layout.py b/tests/kernels/attention/test_paged_decode_layout.py
+index a10e92a6..65f7a0f0 100644
+--- a/tests/kernels/attention/test_paged_decode_layout.py
++++ b/tests/kernels/attention/test_paged_decode_layout.py
+@@ -23,7 +23,8 @@ def make_caches(n_kv, head_dim, bits, num_pages, page_size, device):
+ 
+ 
+ @pytest.mark.nogpu
+-def test_row_layout_shapes():
++def test_row_layout_shapes(monkeypatch):
++    monkeypatch.delenv("EXL3_DEC_GROUP", raising = False)
+     # 5-token verify over a 6-head group: one 32-row program
+     assert decode_row_layout(5, 6, 128) == (32, 1)
+     assert decode_row_layout(5, 6, 256) == (32, 1)
+@@ -33,6 +34,18 @@ def test_row_layout_shapes():
+     assert decode_row_layout(1, 1, 256) == (16, 1)
+ 
+ 
++@pytest.mark.nogpu
++def test_row_layout_shapes_group_override(monkeypatch):
++    # EXL3_DEC_GROUP=1: rows capped at 128 instead of 32, so a kv head's rows share one program while they fit
++    monkeypatch.setenv("EXL3_DEC_GROUP", "1")
++    assert decode_row_layout(8, 8, 128) == (64, 1)
++    assert decode_row_layout(8, 6, 256) == (64, 1)
++    assert decode_row_layout(16, 6, 256) == (128, 1)
++    assert decode_row_layout(1, 6, 256) == (16, 1)
++    assert decode_row_layout(16, 16, 128) == (128, 2)
++    assert decode_row_layout(16, 32, 128) == (128, 4)
++
++
+ @pytest.mark.parametrize("head_dim", [128, 256])
+ @pytest.mark.parametrize("bits", [0, 4])
+ @pytest.mark.parametrize("q_len", [1, 2, 3, 5, 8])

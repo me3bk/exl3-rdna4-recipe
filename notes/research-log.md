@@ -2,12 +2,14 @@
 
 The working notes this recipe came out of, lightly edited: machine-specific serving details are removed and paths
 point at this repo's layout. Dates are 2026. Numbers are from one RX 9070 XT (16 GB) on Fedora 44. Names like
-`wt-replay` were local work branches. All of this was on exllamav3 f1cf869 and TabbyAPI f07131c (with a since
-superseded TabbyAPI patch); the work has since been ported to exllamav3 0662fac as the commits in `patches/features/`.
-The WMMA GEMV, graph re-instantiation, GQA decode attention with Q4W, the review fixes and the DeltaNet replay are in
-`patches/exllamav3-rdna4.patch`. The 16-row GEMV below later grew into the batching series (16- and 32-row GEMV),
-which is in the patch too; see `notes/measurements.md`. The adaptive draft length, tree fallback and Q4P experiments
-are not in this repo. These notes stop before the batching work.
+`wt-replay` were local work branches. Most of this was on exllamav3 f1cf869 and TabbyAPI f07131c (with a since
+superseded TabbyAPI patch); the work was then ported to exllamav3 0662fac (`patches/previous/`: the WMMA GEMV, graph
+re-instantiation, GQA decode attention with Q4W, the review fixes, the DeltaNet replay and the batching series), and
+on 2026-10-12 to 9cc3bd1 (`patches/exllamav3-rdna4.patch` and `patches/features/`), where upstream's own replay and
+graphs-off default replace ours; the last two sections cover those ports. The 16-row GEMV below later grew into the
+batching series (16- and 32-row GEMV); see `notes/measurements.md`. The adaptive draft length, tree fallback and Q4P
+experiments are not in this repo. The notes between the 16-row GEMV and the ports skip the batching work, which is
+written up in `notes/measurements.md`.
 
 Some configuration labels in these notes are loose (for example, the "before/after attention patch" rows mix 64k and
 80k servers, and the MTP row mixes 128k, 144k and 160k servers). The tables in `notes/measurements.md` were rechecked against
@@ -161,7 +163,7 @@ Together roughly 64k -> 140-160k context at full DFlash2 speed (estimate).
 **Other open items.** Autostart on boot for TabbyAPI and Open WebUI; `medium` + anti-spiral as the Open WebUI
 default; a second GPQA pass with a 64k cap; a KLD head-to-head vs UD-Q3_K_XL.
 
-## Upstream dev of 2026-10-10 (tested, not adopted yet)
+## Upstream dev of 2026-10-10 (tested, not adopted)
 
 Our patch set rebased onto ExLlamaV3 `dev` 77ddae2, which now has upstream's own versions of two of our changes:
 DeltaNet layers re-advance from staged inputs instead of keeping per-draft-token state history (3a8e2fb, the job our
@@ -184,3 +186,40 @@ opt-in `EXL3_DRAFT_ROW_BUDGET` (it conflicted with upstream's new hybrid draft m
 
 Short-context speed and quality come out even and 64k is unsettled, so the recipe stays on 0662fac until the rebased
 build has had a long soak under load and more 64k runs.
+
+## Upstream dev of 2026-10-12 (adopted: the current base)
+
+The same port moved to `dev` 9cc3bd1 (v1.6.1 plus the next day's commits). Upstream fixed the `staging_pages` bug itself
+(3a513ac, the same one-line change), so we dropped ours; everything else cherry-picked cleanly.
+
+- A first A/B against the 0662fac build looked like a prose regression, and three interleaved rounds of three builds
+  (0662fac, the 10 October port, this one) confirmed it: prose 64.4 vs 59.1 and 58.7 tok/s, code 146.7 vs 145.8 and
+  145.5. Both ports had it, so it came with upstream's changes up to 10 October, not with the newer commits.
+- Draft acceptance in the server logs ruled out sampling: on greedy code the port accepted more drafts (77% vs 73%)
+  and was still slower, about 45 vs 42.5 ms per speculative step. There is no ROCm profiler on this machine, so we
+  timed the phases of a step with synchronizations around each (`notes/measurements.md`, "Current base"): the whole
+  difference was in the target model's verify forward, and in it the DeltaNet layers (11.9 -> 15.0 ms per step).
+- Cause: upstream's re-advance (3a8e2fb) runs the scan in place on a scratch row, so every token reads the state twice
+  and writes it once in memory; our replay had kept it in registers. Keeping each thread's slice in registers across
+  the pass (one load, one store) brought it back to 12.1 ms with bit-identical output, and made upstream's replay
+  faster too (0.84 -> 0.58 ms in the same per-module timing). A/B after that, three rounds: code 155.0 vs 146.3 tok/s, prose 62.6 vs 63.5 (noise),
+  120k 106.6 vs 103.9. That made the port the default.
+- Review (GPT-6.1 Sol) of the scan change found a pre-existing bug in upstream's Mamba2 replay launch (a v split with no
+  matching kernel; blocks past the head's range updated the neighbouring heads' state), fixed in `0018`. Not tested on a
+  Mamba2 model (we have none).
+- The attention layout test failed 4 cases with our tuning on: `EXL3_DEC_STAGES=2` with the Q4W kernel needs 67.5 KB
+  of LDS at the 128-row tile (16 q heads per kv head), over gfx1201's 64 KB. Qwen3.8 never builds that tile. Now it
+  falls back to one stage (`0014`); Sol's review then found that the launch pick ignored the single-split variant's
+  larger footprint (`0015`).
+- Open: upstream's e2e `test_recurrent_spec_rewind.py` on Qwen3.5-9B (2.0 bpw) returned NaN for every case in 5 of
+  33 runs, with and without our scan change, and in none of the 16 runs after the last failure. Poisoning the KV cache and the
+  recurrent pools with NaN didn't reproduce it, so we don't know the cause yet. The 27B showed nothing like it (PPL,
+  greedy, GPQA, benchmarks).
+- Soak and quality: GPQA Diamond (198, `medium` + anti-spiral, 3 at a time) through the live server on the current
+  base, 92 minutes: 158/198, against 160 on the previous base (147 correct in both, 11 and 13 the other way), the same characters per
+  second per request, VRAM flat after the first 10 minutes, no server errors.
+- The MTP profiles work on the current base with upstream's replay on: `long` 92.3 / 84.0 / 66.0 tok/s at 8.1k /
+  67.6k / 127.8k (peak 14.09 GB), `xl` 68.7 / 63.6 at 127.8k / 160.0k (peak 14.83 GB, was 16.24 of 16.3). Three slots
+  fit in `long` (14.70 GB at 127.8k); concurrent MTP requests are untested, so both stay at one.
+- PR #423 isn't ported: upstream rewrote `sample_from_state` for tensor parallelism, and the PR relied on our row
+  pruning. It stays available on the previous base.

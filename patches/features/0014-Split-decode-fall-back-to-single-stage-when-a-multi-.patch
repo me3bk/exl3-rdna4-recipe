@@ -1,0 +1,95 @@
+From 04a71479f082cc02c987b910e848d70ba72ec1f7 Mon Sep 17 00:00:00 2001
+From: Parth Thakre <144053824+parth-thakre@users.noreply.github.com>
+Date: Mon, 12 Oct 2026 02:07:58 +0530
+Subject: [PATCH 14/18] Split-decode: fall back to single-stage when a
+ multi-stage tile overflows shared memory
+
+With EXL3_DEC_STAGES=2 and the Q4W kernel, the 128-row tile (16 q heads per kv head, 8-token verify,
+head_dim 256) needs 67.5 KB of shared memory on gfx1201's 64 KB, and the eager launch raised
+NoFittingConfig (the BC build declined to eager, which then raised). The eager pick now ladders
+(stages, block_n) and retries single-stage before giving up; the BC build retries its split kernel
+single-stage too, so the graph path keeps the shape.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ exllamav3/modules/attention_fn/bc_attn.py        | 11 +++++++++--
+ exllamav3/modules/attention_fn/triton_paged.py   | 16 ++++++++++------
+ .../attention/test_paged_decode_layout.py        | 11 +++++++++++
+ 3 files changed, 30 insertions(+), 8 deletions(-)
+
+diff --git a/exllamav3/modules/attention_fn/bc_attn.py b/exllamav3/modules/attention_fn/bc_attn.py
+index 01bf6856..c3940bb1 100644
+--- a/exllamav3/modules/attention_fn/bc_attn.py
++++ b/exllamav3/modules/attention_fn/bc_attn.py
+@@ -354,8 +354,15 @@ class BCAttn:
+             BLOCK_ROWS = block_rows, BLOCK_N = block_n,
+         )
+         split_fn = decode_split_kernel_for(self.k_bits if self.quant else 0, self.v_bits if self.quant else 0, hd, hd_pad)
+-        k_split = _compile_kernel(dev, split_fn, sig, consts, split_warps, split_stages,
+-                                  pointer_range_32 = self._pointer_range_32())
++        try:
++            k_split = _compile_kernel(dev, split_fn, sig, consts, split_warps, split_stages,
++                                      pointer_range_32 = self._pointer_range_32())
++        except BCKernelTooLarge:
++            # Same fallback as the eager launch: a multi-stage pick that overflows at this row tile retries single-stage
++            if split_stages <= 1:
++                raise
++            k_split = _compile_kernel(dev, split_fn, sig, consts, split_warps, 1,
++                                      pointer_range_32 = self._pointer_range_32())
+ 
+         sig_c = {
+             "partial_o": "*fp32:16", "partial_ml": "*fp32:16", "out": "*fp16:16", "h32": "*fp16:16",
+diff --git a/exllamav3/modules/attention_fn/triton_paged.py b/exllamav3/modules/attention_fn/triton_paged.py
+index b53d16df..103402aa 100644
+--- a/exllamav3/modules/attention_fn/triton_paged.py
++++ b/exllamav3/modules/attention_fn/triton_paged.py
+@@ -1486,8 +1486,12 @@ def paged_attn_triton_decode(
+         num_warps = cfg_warps
+     if num_stages is None:
+         num_stages = cfg_stages
+-    # K + V tiles in smem across num_stages; on small-smem devices the ladder halves the kv tile
+-    candidates = halving_ladder(cfg_block_n) if block_n is None else [block_n]
++    # K + V tiles in smem across num_stages; on small-smem devices the ladder halves the kv tile, then retries
++    # single-stage (a multi-stage pick, e.g. EXL3_DEC_STAGES, can overflow at the widest row tiles)
++    block_ns = halving_ladder(cfg_block_n) if block_n is None else [block_n]
++    candidates = [(num_stages, bn) for bn in block_ns]
++    if num_stages > 1:
++        candidates += [(1, bn) for bn in block_ns]
+ 
+     group_size = n_q_heads // n_kv_heads
+     block_rows, h_blocks = decode_row_layout(q_len, group_size, hd_pad)
+@@ -1532,11 +1536,11 @@ def paged_attn_triton_decode(
+     split_kernel = decode_split_kernel_for(qck, qcv, head_dim, hd_pad)
+     with torch.cuda.device(q.device):
+         pick_key = (head_dim, hd_pad, qck, qcv, q_len, block_rows, h_blocks, bool(causal), window_left >= 0,
+-                    window_right >= 0, has_sinks, num_warps, num_stages, tuple(candidates), split_kernel.__name__)
+-        block_n = pick_config(
++                    window_right >= 0, has_sinks, num_warps, tuple(candidates), split_kernel.__name__)
++        num_stages, block_n = pick_config(
+             q.device, "paged_attn_decode", pick_key, candidates,
+-            lambda bn: shared_bytes(split_kernel, prepare(bn)[0],
+-                                    num_warps = num_warps, num_stages = num_stages))
++            lambda c: shared_bytes(split_kernel, prepare(c[1])[0],
++                                   num_warps = num_warps, num_stages = c[0]))
+         args, num_splits, partial_o, partial_ml = prepare(block_n)
+ 
+         if k is not None and kv_append_len:
+diff --git a/tests/kernels/attention/test_paged_decode_layout.py b/tests/kernels/attention/test_paged_decode_layout.py
+index 65f7a0f0..ea5469d8 100644
+--- a/tests/kernels/attention/test_paged_decode_layout.py
++++ b/tests/kernels/attention/test_paged_decode_layout.py
+@@ -69,3 +69,14 @@ def test_decode_layout_vs_prefill(device, head_dim, bits, q_len, group, num_spli
+     o_dec = paged_attn_triton_decode(**common, num_splits = num_splits)
+     o_pre = paged_attn_triton_prefill(**common)
+     torch.testing.assert_close(o_dec, o_pre, rtol = 0, atol = 2e-3)
++
++
++@pytest.mark.parametrize("num_splits", [1, 16])
++@torch.inference_mode()
++def test_decode_stage_fallback(device, monkeypatch, num_splits):
++    # EXL3_DEC_STAGES=2 with the Q4W kernel at a 128-row tile (16 q heads per kv head, 8-token verify, head_dim 256)
++    # overflows 64 KB of shared memory; the launch must drop to single-stage instead of raising NoFittingConfig
++    for name, value in (("EXL3_DEC_GROUP", "1"), ("EXL3_DEC_Q4W", "1"), ("EXL3_DEC_STAGES", "2"),
++                        ("EXL3_DEC_BLOCK_N", "16")):
++        monkeypatch.setenv(name, value)
++    test_decode_layout_vs_prefill(device, head_dim = 256, bits = 4, q_len = 8, group = 16, num_splits = num_splits)

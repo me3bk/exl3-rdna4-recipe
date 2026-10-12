@@ -20,7 +20,7 @@ Reported per job, not judged:
 If PYTHONPATH is set, exllamav3 must be imported from its first entry (checked), so a specific checkout can be
 tested without installing it. Run from the repo root:
 
-  source setup/env.sh; export EXL3_GDN_REPLAY=1
+  source setup/env.sh
   python bench/bench_batch_sanity.py --bsz 2 4 --out /tmp/batch.json
   PYTHONPATH=exllamav3 python bench/bench_batch_sanity.py --bsz 4
 """
