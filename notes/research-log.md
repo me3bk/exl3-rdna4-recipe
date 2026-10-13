@@ -212,10 +212,10 @@ The same port moved to `dev` 9cc3bd1 (v1.6.1 plus the next day's commits). Upstr
   of LDS at the 128-row tile (16 q heads per kv head), over gfx1201's 64 KB. Qwen3.8 never builds that tile. Now it
   falls back to one stage (`0014`); Sol's review then found that the launch pick ignored the single-split variant's
   larger footprint (`0015`).
-- Open: upstream's e2e `test_recurrent_spec_rewind.py` on Qwen3.5-9B (2.0 bpw) returned NaN for every case in 5 of
-  33 runs, with and without our scan change, and in none of the 16 runs after the last failure. Poisoning the KV cache and the
-  recurrent pools with NaN didn't reproduce it, so we don't know the cause yet. The 27B showed nothing like it (PPL,
-  greedy, GPQA, benchmarks).
+- Upstream's e2e `test_recurrent_spec_rewind.py` on Qwen3.5-9B (2.0 bpw) returned NaN for every case in 5 of 33 runs,
+  with and without our scan change, and in none of the 16 runs after the last failure. Poisoning the KV cache and the
+  recurrent pools with NaN didn't reproduce it. Update 2026-10-13: the same test fails intermittently with PyTorch's
+  expandable segments on and not with them off (see "Upstream dev of 2026-10-13"), which makes them the likely cause.
 - Soak and quality: GPQA Diamond (198, `medium` + anti-spiral, 3 at a time) through the live server on the current
   base, 92 minutes: 158/198, against 160 on the previous base (147 correct in both, 11 and 13 the other way), the same characters per
   second per request, VRAM flat after the first 10 minutes, no server errors.
@@ -242,8 +242,8 @@ the other 15 commits cherry-picked cleanly.
   long-context runs spread too widely (96-124 tok/s at 64k for one build) to say more than that.
 - Soak and quality: GPQA Diamond (198, `medium` + anti-spiral, 3 at a time) through the live server on 0f685aa:
   164/198 (158 on 9cc3bd1, 160 on the previous base), within the run-to-run spread. No server errors, VRAM flat.
-- Full GPQA at `xhigh` (60k cap, 2 at a time), in progress: 80/89 so far vs 76/89 for `medium` on the same questions,
-  one cap hit (`notes/measurements.md`).
+- Full GPQA at `xhigh` (60k cap, 2 at a time): 175/198 (88.4%) against 164 for `medium` on the same build. It got 18 of
+  the 34 `medium` missed and missed 7 `medium` got; 6 answers hit the 60k cap, all wrong (`notes/measurements.md`).
 - Other distros. The setup scripts assumed Fedora: ROCm under `/usr`, ROCm's clang in `/usr/lib64/rocm/llvm/bin`,
   headers fetched with `dnf`. `setup/rocm.sh` now finds ROCm through `hipconfig` (`/opt/rocm` on AMD's packages and
   Arch), and `setup/fetch_deps.sh` checks the headers and prints the missing packages for Fedora, Debian/Ubuntu or Arch
@@ -253,10 +253,16 @@ the other 15 commits cherry-picked cleanly.
   identical to the Fedora build (4 prompts x 400 tokens). Two fixes came out of it: the header check was missing
   `rocrand` (hipRAND's headers include it; Fedora's base ROCm packages have it, AMD's don't), and the Fedora unpack
   loop died partway with pipefail (`rpm2cpio | cpio`, SIGPIPE), which the old script had too.
-- The recurrent kernel tests are flaky when the whole directory runs, on every build and distro we tried (the
-  9cc3bd1 build too): 0 to 44 of 884 fail per run, mostly `test_recurrent_rewind_batched.py`, which passes every time on
-  its own. The failures are guard-band checks (`write outside y`: the sentinel around the output buffer is overwritten
-  with zeros), which looks like a kernel from an earlier test still writing into memory the allocator has handed to the
-  next one. Not yet checked on upstream without our patches; it may be related to the intermittent NaN in upstream's
-  spec rewind e2e test.
+- The recurrent kernel tests were flaky when the whole directory ran, on every build and distro we tried: 0 to 44 of
+  884 failed per run, mostly guard-band checks around outputs overwritten with zeros, and once a `.sum()` that came back
+  as an impossible count. The allocator reproducers and an A/B on the 0f685aa build strongly implicate PyTorch's
+  expandable segments, which our `env.sh` had turned on. On gfx1201, memory
+  mapped through HIP's virtual memory API can lose writes after a remap at the same address (ROCm/TheRock#8744,
+  pytorch/pytorch#195202). A torch loop (empty the cache, allocate, fill, check) lost data in 65 of 300 rounds with them
+  on and none off; a HIP-only loop (final version) lost data in 19-99% of rounds on ROCm 7.1.1 and 7.2.4, never with `hipMalloc`. A/B on
+  the 0f685aa build: recurrent tests failed in 3 of 10 runs on, 0 of 10 off; upstream's spec-rewind e2e test (Qwen3.5-9B)
+  failed 7 of its 8 cases in 3 of 45 runs on, none in 45 off (whether those failures were NaN wasn't checked; see the
+  open NaN noted earlier). Off, the 106k-token prefill after concurrent and image load still passes at 3 slots. After
+  switching, code measured 156.6 / 156.4 tok/s (about 152 before) and prose 60.7 / 67.2 (about 60). Expandable segments
+  are now off in `setup/env.sh` and on the live server.
 

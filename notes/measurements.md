@@ -44,9 +44,9 @@ The default effort (`xhigh`) tells the model to "consider plausible alternatives
 it hit the 30k token cap on 7 of 45 questions. With `medium` and this prompt it hit the cap on none and scored higher.
 On the first 45 questions, which both runs answered, it took 4.6x less total time.
 
-When accuracy matters more than time, use `xhigh` with the same prompt and a large `max_tokens` (60k). On the 48 GPQA
-Diamond questions `medium` got wrong at least once, it got 28 right, where the two `medium` passes got 9 and 12. It
-thinks about 5x longer on those questions (see "Accuracy: GPQA Diamond" below).
+When accuracy matters more than time, use `xhigh` with the same prompt and a large `max_tokens` (60k). On all 198 GPQA
+Diamond questions it scored 88.4% against 82.8% for `medium` on the same build, at about 3x the median time per question (see
+"Accuracy: GPQA Diamond" below).
 
 ## Results
 
@@ -180,9 +180,14 @@ series' base over 4 x 400 tokens (`test_greedy_equal.py`); bs2 and bs4 batched o
 Memory: a test with 4 chats plus an image read 16.25 of 16.3 GB. Without expandable segments, a 106,294-token prefill
 ran out of memory with 4 slots on a server that had already served concurrent chats and images: a 256 MB buffer
 failed with 415 MB reserved but unallocated, which is fragmentation. With `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`
-(set in `setup/env.sh`) and the same prior load, a gate suite (0xSero's local-ai-registry: load, chat, reasoning,
+(then set in `setup/env.sh`) and the same prior load, a gate suite (0xSero's local-ai-registry: load, chat, reasoning,
 tools, context with the 106,294-token prompt recalled, speed) passed at 3 slots (peak 16.17 GB) and at 4 slots (peak
 16.28 of 16.3 GB). The config defaults to 3 slots (`max_batch_size: 3`) for the extra headroom.
+
+Expandable segments are now off (2026-10-13): on gfx1201 they corrupt memory (see "Allocator" under Limitations). With
+them off and the same prior load (concurrent chats, image requests), the gate suite passed again at 3 slots on the
+0f685aa build, the 106,294-token prompt recalled, no out-of-memory errors. We haven't repeated the 4-slot run without
+them, so 4 slots is no longer recommended.
 
 `EXL3_DRAFT_ROW_BUDGET` (shorter drafts when many requests are active, to stay within 16 or 24 rows) is an
 experimental setting, off by default, that didn't help: through the API it was slower in every test (196 / 194 vs
@@ -249,13 +254,23 @@ All 198 questions, 3.0 bpw, `medium` + anti-spiral, same sampling, through the s
 | SC H4 quant, current base (2026-10-12) | 79.8% (158/198) | 4 |
 | SC H4 quant, current base on 0f685aa (2026-10-13) | 82.8% (164/198) | 5 |
 
-**In progress (2026-10-13): all 198 at `xhigh`.** Same build, quant, prompt and sampling as the 0f685aa row, with a
-60k token cap and two requests at a time. After 89 questions: 80 correct (89.9%), against 76 for the `medium` run on
-the same 89. `xhigh` fixed 7 of the 13 that `medium` missed and missed 3 that `medium` got. One answer hit the 60k
-cap. Median reasoning was 18k characters vs 6k for `medium`, and median time 105 s vs 39 s. VRAM 15.55-15.56 GB
-throughout. Full result when it finishes.
+**All 198 at `xhigh` (2026-10-13): 88.4% (175/198).** Same build, quant, prompt and sampling as the 0f685aa row, with
+a 60k token cap and two requests at a time (`GPQA_EFFORT=xhigh GPQA_MAX_TOKENS=60000 GPQA_WORKERS=2`):
 
-So about 81% on the full set; the first 50 questions happen to be easier than average. Both SC H4 runs answered 147
+| On all 198 | `medium` (0f685aa row) | `xhigh` |
+|---|---|---|
+| Correct | 164 | **175** |
+| Hit the token cap | 5 (30k cap) | 6 (60k cap), all wrong |
+| Median reasoning | 5.5k characters | 18.7k characters |
+| Median time per question | 36 s | 105 s |
+
+`xhigh` got 18 of the 34 questions `medium` missed and missed 7 that `medium` got. The requests took 11.7 hours in
+total, two at a time; elapsed time was 6 h 19 min, including a 21-minute pause (the client was stopped and resumed).
+VRAM samples every 30 s ranged from 15,221 to 15,721 MB, and no server errors came from this run. It ran with
+expandable segments on, before they were turned off. 88.4% is 1.5 points under the published BF16 score (89.9%,
+settings not identical). This is one sampled run.
+
+So `medium` scores about 81% on the full set; the first 50 questions happen to be easier than average. Both SC H4 runs answered 147
 questions correctly and both missed 27; 11 and 13 went the other way, about the spread we see between two sampled passes
 at temperature 1.0 (the two passes of the plain quant differ by 3), though different builds can contribute too. The current
 base's run took 6% longer in total because its answers were 6% longer; per request it produced the same characters per
@@ -498,9 +513,15 @@ projections at ~25%. A token takes ~1,250-1,450 kernel launches.
   base upstream's replay is always on, MTP included; concurrent requests with MTP are untested.
 - The WMMA GEMV only runs on gfx1200/gfx1201. Everything was tested on one RX 9070 XT; the RX 9070 and RDNA3 cards are
   untested.
-- Concurrency is `max_batch_size: 3` by default. 4 works and passed the same long-context gate, but peaks at 16.28 of
-  16.3 GB (see Batching). Without expandable segments in the allocator, a long prompt after mixed concurrent use can
-  run out of memory.
+- Concurrency is `max_batch_size: 3`. 4 passed the long-context gate only with expandable segments, which are now off
+  (next item), so it's untested in the current setup.
+- Allocator: on gfx1201, PyTorch's expandable segments (`PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`) corrupt
+  memory. They map memory through HIP's virtual memory API, and after a remap at the same address written data can be
+  lost (ROCm/TheRock#8744, pytorch/pytorch#195202, both open on 2026-10-13). Our HIP-only loop (map, fill, sync, check)
+  lost data in 19-99% of rounds depending on the variant (final version of the probe), on ROCm 7.1.1 and 7.2.4, and
+  never with `hipMalloc`. In ExLlamaV3, with it on, the recurrent kernel tests failed in 3 of 10 full runs and upstream's
+  spec-rewind e2e test failed 7 of its 8 cases in 3 of 45 runs; with it off, 0 of 10 and 0 of 45. `setup/env.sh` turns them off; we had turned them on to avoid
+  fragmentation (see Batching).
 - The Q4W attention kernel is still far from memory bandwidth on 4-bit caches (~140 GB/s); that needs a hand-written
   HIP kernel that beats Triton, which we don't have.
 - On gfx1201 with Fedora 44, the HSA exit handler can segfault at interpreter shutdown and leave the GPU at 100%. The

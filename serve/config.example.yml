@@ -28,9 +28,9 @@ model:
   chunk_size: 1024
   # How many requests decode together; more wait their turn. All active requests share the cache_size tokens above.
   # 3 is the default (about 195-200 tok/s combined for code through the API, vs 131-132 for one request). 4 is the
-  # maximum we document (~240-245 combined) but peaked at 16.28 of 16.3 GB in our long-context test after concurrent
-  # and image requests, vs 16.17 GB at 3.
-  # Both need the allocator setting in setup/env.sh (PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True).
+  # most we tested (~240-245 combined). It passed our long-context test after concurrent and image requests with
+  # PyTorch's expandable segments on; setup/env.sh now turns them off (they corrupt memory on gfx1201), and 4 hasn't
+  # been retested without them. Use 3.
   max_batch_size: 3
   # The vision encoder stays in system RAM (~20 ms per image). Keeping it in VRAM doesn't fit at 128k.
   vision: true

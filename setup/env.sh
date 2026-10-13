@@ -24,8 +24,12 @@ export CC=${CC:-gcc}
 command -v "$CC" >/dev/null || echo "setup/env.sh: warning: C compiler '$CC' not found; Triton kernels won't compile" >&2
 export CPATH="$DEPS_DIR/usr/include:$DEPS_DIR/usr/include/python3.12${CPATH:+:$CPATH}"
 
-# Expandable segments cut allocator fragmentation, which otherwise can OOM a long prefill after concurrent use
-export PYTORCH_CUDA_ALLOC_CONF=${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}
+# Expandable segments off. On gfx1201, memory mapped through HIP's virtual memory API (which expandable segments use)
+# can lose writes after a remap at the same address (ROCm/TheRock#8744, pytorch/pytorch#195202). With it on, the
+# recurrent kernel tests failed in 3 of 10 runs and upstream's spec-rewind e2e test in 3 of 45; off, none did.
+# ExLlamaV3 0f685aa doesn't turn them on for ROCm; this sets an explicit default, and a value you set yourself is kept.
+# Off, a 106k-token prefill after concurrent and image requests still fits at 3 slots (notes/measurements.md, Batching).
+export PYTORCH_CUDA_ALLOC_CONF=${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:False}
 
 # HIP graphs are off: upstream (96838c9, in the base since v1.6.0) makes that the ROCm default. On this card replaying a
 # graph is no faster than launching its kernels one by one (same tok/s at 1 and 3 requests, same greedy answers), and
