@@ -8,7 +8,8 @@
 #   container/run.sh stop
 #
 # Environment: CTX (context, default 96k), IMAGE (default below), MODELS (default ~/.cache/exl3-rdna4/models), PORT (default 8096),
-# CT=docker|podman (default: whichever works, Docker first), NO_TRIAGE=1 (don't offer ./triage.sh on failure).
+# CT=docker|podman (default: whichever works, Docker first), NO_TRIAGE=1 (don't offer ./triage.sh on failure),
+# EXL3_QC_STAGING=0 (~0.2 GB less VRAM at 128k for 17-28% slower long-prompt prefill; notes/measurements.md).
 set -euo pipefail
 IMAGE=${IMAGE:-ghcr.io/parth-thakre/exl3-rdna4:latest}
 MODELS=${MODELS:-${XDG_CACHE_HOME:-$HOME/.cache}/exl3-rdna4/models}
@@ -108,7 +109,7 @@ fi
 
 "$CT" rm -f "$NAME" >/dev/null 2>&1 || true
 "$CT" run -d --name "$NAME" "${gpu_args[@]}" "${user_args[@]}" --shm-size 8g \
-    -e CTX="$CTX" -p "127.0.0.1:$PORT:8096" -v "$MODELS:/models:ro" "$IMAGE" >/dev/null || die "the container didn't start"
+    -e CTX="$CTX" ${EXL3_QC_STAGING:+-e EXL3_QC_STAGING="$EXL3_QC_STAGING"} -p "127.0.0.1:$PORT:8096" -v "$MODELS:/models:ro" "$IMAGE" >/dev/null || die "the container didn't start"
 echo "starting $NAME ($CT, $CTX context); loading the model takes a minute or two"
 for _ in $(seq 1 120); do
     if curl -sf -m 2 "http://127.0.0.1:$PORT/health" >/dev/null 2>&1; then

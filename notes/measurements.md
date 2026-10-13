@@ -53,8 +53,40 @@ real KDE desktop and a browser, plus a held allocation standing in for a heavier
 
 So the default is 96k, and `CTX=128k` is for a card with nothing else on it or a light desktop. The MTP profile isn't a
 way to keep 128k next to a heavier desktop either: at 128k it also didn't load with ~2.1 GB in use, and it serves one
-request at a time. PyTorch takes what's free, so
-the peak is close to the card's size in every row; it isn't the minimum each needs.
+request at a time. PyTorch takes what's free, so the peak is close to the card's size in every row; it isn't the
+minimum each needs.
+
+### What 128k needs, and what lowers it (2026-10-14)
+
+The same test at 128k on the d021207/6ffe066 image (aec2d311), started the way the plugin starts it, with a block of
+VRAM held by another process standing in for a heavier desktop, stepped up until the server failed. A held block is
+a cautious stand-in: with the earlier build, a real desktop using ~1.1 GB passed at 128k, while here ~0.8 GB in use,
+nearly all of it held, didn't. Probably the driver can move a desktop's buffers to system memory when the card fills
+up, but not compute allocations (not verified). "In use" is sysfs VRAM used before the server starts.
+
+| Setting (128k) | Passes with | Fails with | Prefill, 64k / 96k / 120k prompt |
+|---|---|---|---|
+| default | 667 MiB in use | 783 MiB | 997 / 863 / 867 tok/s |
+| `EXL3_QC_STAGING=0` (+ `--autosplit-reserve 256`) | 873 MiB | 975 MiB | 825 / 657 / 623 tok/s |
+
+- Where it fails: the long-context gate's 106k-token prefill. By default ExLlamaV3 dequantizes the whole Q4 cache pool
+  of one layer into an fp16 scratch for prefill attention (K and V, 256 MiB each at 128k for this model's 4 KV heads
+  of 256), then runs the fp16 kernel over it. `EXL3_QC_STAGING=0` reads the quantized cache in the kernel instead: no
+  scratch, about 0.2 GB more room, but 17-28% slower prefill on long prompts (a full 128k prompt takes ~205 s instead of
+  ~147 s). Decode and short prompts are unchanged (code 157 tok/s either way; 7.7k prefill 1,160 vs 1,116, 29k 1,020
+  vs 1,068). Not the default; worth it only to fit 128k next to a slightly heavier desktop.
+- Next in line after that: a 170 MiB fp16 weight that prefill reconstructs for the large MLP GEMMs, and ~0.5 GB that
+  PyTorch holds reserved but can't use (fragmentation). Expandable segments would fix the fragmentation but corrupt
+  memory on gfx1201 (see Limitations); `max_split_size_mb` 256 or 128 didn't help, and 64 made it worse.
+- The load check: below that, ExLlamaV3's autosplit refuses to load ("Insufficient VRAM in split for model and cache")
+  when free VRAM minus `autosplit_reserve` (768 MB in the configs) doesn't cover the model and cache. Lowering the
+  reserve only moves the failure from load to the first long prompt, which is worse; keep it.
+- No effect at the load check, where they all failed at the same point (not tested past it): `--chunk-size 512`,
+  `--max-batch-size 2`, `--draft-num-tokens 5`, a 3-bit draft cache. turboderp's `SC_3.00bpw_H4_V4` quant is 0.46 GB smaller only because
+  its vision encoder is 4-bit, which runs from system RAM here, so it saves no VRAM.
+- What would: blockwise staging (dequantize a few thousand tokens at a time and merge the partial attention by its
+  log-sum-exp) would keep the fast fp16 kernel without the full-pool scratch. The prefill kernel doesn't return the
+  log-sum-exp yet, so that's kernel work, not done.
 
 ## Recommended request settings
 
