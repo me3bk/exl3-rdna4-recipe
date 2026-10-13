@@ -541,11 +541,15 @@ projections at ~25%. A token takes ~1,250-1,450 kernel launches.
   (next item), so it's untested in the current setup.
 - Allocator: on gfx1201, PyTorch's expandable segments (`PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`) corrupt
   memory. They map memory through HIP's virtual memory API, and after a remap at the same address written data can be
-  lost (ROCm/TheRock#8744, pytorch/pytorch#195202, both open on 2026-10-13). Our HIP-only loop (map, fill, sync, check)
+  lost (ROCm/TheRock#8744, pytorch/pytorch#195202). AMD root-caused it on 2026-10-13 in the `amdgpu` kernel driver, not
+  ROCm: with all VRAM visible through Resizable BAR, the driver updates the page tables from the CPU and then skips the
+  GPU TLB flush after an unmap, so a later map at the same address writes into the old pages. The fix is in review on
+  the amd-gfx list (https://lore.kernel.org/amd-gfx/20261008124232.23825-1-christian.koenig@amd.com/), so it arrives
+  with a kernel update, and expandable segments can come back once it does (they would help batch 4 fit). Our HIP-only loop (map, fill, sync, check)
   lost data in 19-99% of rounds depending on the variant (final version of the probe), on ROCm 7.1.1 and 7.2.4, and
   never with `hipMalloc`. In ExLlamaV3, with it on, the recurrent kernel tests failed in 3 of 10 full runs and upstream's
-  spec-rewind e2e test failed 7 of its 8 cases in 3 of 45 runs; with it off, 0 of 10 and 0 of 45. `setup/env.sh` turns them off; we had turned them on to avoid
-  fragmentation (see Batching).
+  spec-rewind e2e test failed 7 of its 8 cases in 3 of 45 runs; with it off, 0 of 10 and 0 of 45. `setup/env.sh` turns
+  them off; we had turned them on to avoid fragmentation (see Batching).
 - The Q4W attention kernel is still far from memory bandwidth on 4-bit caches (~140 GB/s); that needs a hand-written
   HIP kernel that beats Triton, which we don't have.
 - On gfx1201 with Fedora 44, the HSA exit handler can segfault at interpreter shutdown and leave the GPU at 100%. The
