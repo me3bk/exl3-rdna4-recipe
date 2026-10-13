@@ -242,4 +242,6 @@ the other 15 commits cherry-picked cleanly.
   long-context runs spread too widely (96-124 tok/s at 64k for one build) to say more than that.
 - Soak and quality: GPQA Diamond (198, `medium` + anti-spiral, 3 at a time) through the live server on 0f685aa:
   164/198 (158 on 9cc3bd1, 160 on the previous base), within the run-to-run spread. No server errors, VRAM flat.
+- Full GPQA at `xhigh` (60k cap, 2 at a time), in progress: 80/89 so far vs 76/89 for `medium` on the same questions,
+  one cap hit (`notes/measurements.md`).
 

@@ -249,6 +249,12 @@ All 198 questions, 3.0 bpw, `medium` + anti-spiral, same sampling, through the s
 | SC H4 quant, current base (2026-10-12) | 79.8% (158/198) | 4 |
 | SC H4 quant, current base on 0f685aa (2026-10-13) | 82.8% (164/198) | 5 |
 
+**In progress (2026-10-13): all 198 at `xhigh`.** Same build, quant, prompt and sampling as the 0f685aa row, with a
+60k token cap and two requests at a time. After 89 questions: 80 correct (89.9%), against 76 for the `medium` run on
+the same 89. `xhigh` fixed 7 of the 13 that `medium` missed and missed 3 that `medium` got. One answer hit the 60k
+cap. Median reasoning was 18k characters vs 6k for `medium`, and median time 105 s vs 39 s. VRAM 15.55-15.56 GB
+throughout. Full result when it finishes.
+
 So about 81% on the full set; the first 50 questions happen to be easier than average. Both SC H4 runs answered 147
 questions correctly and both missed 27; 11 and 13 went the other way, about the spread we see between two sampled passes
 at temperature 1.0 (the two passes of the plain quant differ by 3), though different builds can contribute too. The current
