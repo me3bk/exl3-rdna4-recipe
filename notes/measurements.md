@@ -545,7 +545,9 @@ projections at ~25%. A token takes ~1,250-1,450 kernel launches.
   ROCm: with all VRAM visible through Resizable BAR, the driver updates the page tables from the CPU and then skips the
   GPU TLB flush after an unmap, so a later map at the same address writes into the old pages. The fix is in review on
   the amd-gfx list (https://lore.kernel.org/amd-gfx/20261008124232.23825-1-christian.koenig@amd.com/), so it arrives
-  with a kernel update, and expandable segments can come back once it does (they would help batch 4 fit). Our HIP-only loop (map, fill, sync, check)
+  with a kernel update, and expandable segments can come back once it does (they would help batch 4 fit). Fedora's
+  7.2.9-201 kernel (2026-10-09, with an unrelated gmc12 TLB `flush_type` fix) doesn't have it: the HIP-only loop still
+  lost data in 150 of 300 rounds. Our HIP-only loop (map, fill, sync, check)
   lost data in 19-99% of rounds depending on the variant (final version of the probe), on ROCm 7.1.1 and 7.2.4, and
   never with `hipMalloc`. In ExLlamaV3, with it on, the recurrent kernel tests failed in 3 of 10 full runs and upstream's
   spec-rewind e2e test failed 7 of its 8 cases in 3 of 45 runs; with it off, 0 of 10 and 0 of 45. `setup/env.sh` turns
