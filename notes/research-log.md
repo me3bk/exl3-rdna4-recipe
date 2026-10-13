@@ -244,4 +244,19 @@ the other 15 commits cherry-picked cleanly.
   164/198 (158 on 9cc3bd1, 160 on the previous base), within the run-to-run spread. No server errors, VRAM flat.
 - Full GPQA at `xhigh` (60k cap, 2 at a time), in progress: 80/89 so far vs 76/89 for `medium` on the same questions,
   one cap hit (`notes/measurements.md`).
+- Other distros. The setup scripts assumed Fedora: ROCm under `/usr`, ROCm's clang in `/usr/lib64/rocm/llvm/bin`,
+  headers fetched with `dnf`. `setup/rocm.sh` now finds ROCm through `hipconfig` (`/opt/rocm` on AMD's packages and
+  Arch), and `setup/fetch_deps.sh` checks the headers and prints the missing packages for Fedora, Debian/Ubuntu or Arch
+  (on Fedora it still fetches them without sudo). Tested the README install end to end in podman containers on the same
+  GPU: Ubuntu 24.04 (`rocm/dev-ubuntu-24.04:7.2.4`, AMD's apt packages) and Arch (ROCm 7.2.4 from the Arch repos,
+  Python 3.12 from uv). Both build the extension against ROCm 7.2.4, pass the 32-row GEMV test and give greedy output
+  identical to the Fedora build (4 prompts x 400 tokens). Two fixes came out of it: the header check was missing
+  `rocrand` (hipRAND's headers include it; Fedora's base ROCm packages have it, AMD's don't), and the Fedora unpack
+  loop died partway with pipefail (`rpm2cpio | cpio`, SIGPIPE), which the old script had too.
+- The recurrent kernel tests are flaky when the whole directory runs, on every build and distro we tried (the
+  9cc3bd1 build too): 0 to 44 of 884 fail per run, mostly `test_recurrent_rewind_batched.py`, which passes every time on
+  its own. The failures are guard-band checks (`write outside y`: the sentinel around the output buffer is overwritten
+  with zeros), which looks like a kernel from an earlier test still writing into memory the allocator has handed to the
+  next one. Not yet checked on upstream without our patches; it may be related to the intermittent NaN in upstream's
+  spec rewind e2e test.
 

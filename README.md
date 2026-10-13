@@ -24,7 +24,7 @@ tested on one machine:
 | | |
 |---|---|
 | GPU | AMD RX 9070 XT, 16 GB (gfx1201) |
-| OS | Fedora 44, kernel 7.2 |
+| OS | Fedora 44, kernel 7.2 (install also tested in Ubuntu 24.04 and Arch containers, see Requirements) |
 | ROCm | system ROCm 7.1.1 (Fedora packages) to build; PyTorch 2.13.0 + ROCm 7.2 wheels to run |
 | Upstream | ExLlamaV3 `dev` 0f685aa (v1.6.1 plus two days of commits), TabbyAPI `main` 2fd6cc7 |
 
@@ -45,9 +45,20 @@ tested on one machine:
 ## Requirements
 
 - AMD RX 9070 XT or RX 9070 (gfx1201, 16 GB). Only the 9070 XT has been tested.
-- Fedora 44 with its ROCm packages (`rocm-hip-devel rocm-runtime-devel hipcc rocm-clang-devel rocm-llvm-devel
-  rocm-comgr-devel rocm-libc++-devel rocblas-devel hipblas-devel hipblas-common-devel rocminfo rocm-smi`), plus
-  `sudo dnf install gcc gcc-c++ python3.12 git curl`.
+- Linux with a ROCm HIP SDK (compiler, HIP headers and the math libraries' headers); ROCm 7.1.1 and 7.2.4 tested. The
+  server runs on Fedora 44 with its own ROCm 7.1.1 packages. The install was also tested end to end in Ubuntu 24.04 and
+  Arch containers with ROCm 7.2.4 in `/opt/rocm`, on the same GPU: same greedy output as the Fedora build
+  (`notes/research-log.md`). The scripts find ROCm through `hipconfig` (or set `ROCM_PATH`), and
+  `setup/fetch_deps.sh` checks the headers and prints the missing packages for your distro.
+  - Fedora: `sudo dnf install rocm-hip-devel rocm-runtime-devel hipcc rocm-clang-devel rocm-llvm-devel rocm-comgr-devel
+    rocm-libc++-devel rocblas-devel hipblas-devel hipblas-common-devel rocminfo rocm-smi gcc gcc-c++ python3.12 git curl`
+    (`setup/fetch_deps.sh` fetches the remaining -devel headers without sudo)
+  - Ubuntu 24.04: AMD's ROCm apt repository (Ubuntu's own ROCm packages are too old), then
+    `sudo apt install rocm-hip-sdk rocm-smi-lib gcc g++ python3.12-venv python3.12-dev git curl`
+  - Arch: `sudo pacman -S rocm-hip-sdk rocm-smi-lib hipblaslt hipsparselt gcc git curl uv`, then Python 3.12 from uv:
+    `uv python install 3.12` and `export PYTHON=$(uv python find 3.12)` before `setup/make_venv.sh`
+  - Other distros: the same packages under your distro's names; Python 3.12 from uv if the distro has a newer one.
+- Python 3.12, the version we tested.
 - Your user in the `render` group (access to `/dev/kfd` and `/dev/dri/renderD*`).
 - About 20 GB of disk for the models and 15 GB for the Python environment.
 - Nothing else on the GPU while serving: the server uses almost all of the 16 GB.
@@ -57,7 +68,7 @@ tested on one machine:
 From the repo root:
 
 ```bash
-setup/fetch_deps.sh          # missing -devel headers into deps/ (no sudo; or dnf install them, see the script)
+setup/fetch_deps.sh          # check the ROCm and Python headers; on Fedora fetch missing ones into deps/ (no sudo)
 setup/make_venv.sh           # .venv/ with PyTorch 2.13 for ROCm 7.2 and the tested package versions
 setup/build_exllamav3.sh     # clone ExLlamaV3 at the pinned commit, apply our patch, compile for gfx1201
 setup/install_tabby.sh       # clone TabbyAPI at the pinned commit, write tabbyAPI/config.yml

@@ -10,13 +10,15 @@
 #   VENV               venv to build with and install into (default: .venv/)
 #   DEPS_DIR           unpacked header packages from setup/fetch_deps.sh (default: deps/)
 #   PYTORCH_ROCM_ARCH  GPU target (default: gfx1201)
-#   BUILD_CC/BUILD_CXX compilers for the extension (default: ROCm's clang)
+#   ROCM_PATH          ROCm install to build against (default: found by setup/rocm.sh)
+#   BUILD_CC/BUILD_CXX compilers for the extension (default: ROCm's clang, found by setup/rocm.sh)
 #   MAX_JOBS           parallel compile jobs (default: 12; each needs a few GB of RAM)
 #   NO_INSTALL=1       only build the extension in place; don't pip install anything
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 source "$ROOT/setup/versions.sh"
 source "$ROOT/setup/lib.sh"
+source "$ROOT/setup/rocm.sh"
 EXLLAMAV3_DIR=${EXLLAMAV3_DIR:-$ROOT/exllamav3}
 VENV=${VENV:-$ROOT/.venv}
 DEPS_DIR=${DEPS_DIR:-$ROOT/deps}
@@ -36,9 +38,10 @@ checkout_patched "$EXLLAMAV3_DIR" "$EXLLAMAV3_GIT_URL" "$EXLLAMAV3_COMMIT" "${pa
 [ -f "$VENV/bin/activate" ] || die "no venv at $VENV; run setup/make_venv.sh first"
 source "$VENV/bin/activate"
 cd "$EXLLAMAV3_DIR"
-export ROCM_HOME=${ROCM_HOME:-/usr} ROCM_PATH=${ROCM_PATH:-/usr}       # Fedora's split ROCm layout lives under /usr
+find_rocm || die "no usable ROCm (see above)"
+echo "ROCm: $ROCM_PATH, clang in $ROCM_CLANG_DIR"
 # Not CC/CXX: setup/env.sh sets CC=gcc for Triton, and the extension must be built with ROCm's clang
-export CC=${BUILD_CC:-/usr/lib64/rocm/llvm/bin/clang} CXX=${BUILD_CXX:-/usr/lib64/rocm/llvm/bin/clang++}
+export CC=${BUILD_CC:-$ROCM_CLANG_DIR/clang} CXX=${BUILD_CXX:-$ROCM_CLANG_DIR/clang++}
 export PYTORCH_ROCM_ARCH=${PYTORCH_ROCM_ARCH:-gfx1201}                # only the 9070 XT, not an iGPU
 export CPATH="$DEPS_DIR/usr/include:$DEPS_DIR/usr/include/python3.12${CPATH:+:$CPATH}"
 export MAX_JOBS=${MAX_JOBS:-12}

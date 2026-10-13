@@ -4,6 +4,7 @@
 _RECIPE_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 VENV=${VENV:-$_RECIPE_ROOT/.venv}
 DEPS_DIR=${DEPS_DIR:-$_RECIPE_ROOT/deps}
+source "$_RECIPE_ROOT/setup/rocm.sh"
 unset _RECIPE_ROOT
 if [ ! -f "$VENV/bin/activate" ]; then
     echo "setup/env.sh: no venv at $VENV (run setup/make_venv.sh, or set VENV)" >&2
@@ -14,10 +15,11 @@ source "$VENV/bin/activate" || return 1
 # Pick the 9070 XT. On the test machine device 0 is the 9070 XT and the CPU's gfx1036 iGPU is hidden this way.
 # Check `rocminfo` / `amd-smi list` if you have more than one GPU.
 export HIP_VISIBLE_DEVICES=${HIP_VISIBLE_DEVICES:-0}
-export ROCM_HOME=${ROCM_HOME:-/usr} ROCM_PATH=${ROCM_PATH:-/usr}   # Fedora installs ROCm under /usr
+find_rocm || return 1   # sets ROCM_PATH/ROCM_HOME: /opt/rocm on most distros, /usr on Fedora (setup/rocm.sh)
 
-# Triton compiles a small C helper at runtime: it needs a host C compiler (gcc; sudo dnf install gcc gcc-c++) and
-# Python.h. The headers come from python3.12-devel, or from deps/ as unpacked by setup/fetch_deps.sh.
+# Triton compiles a small C helper at runtime: it needs a host C compiler (gcc) and
+# Python.h. The headers come with Python (python3.12-devel / python3.12-dev on distros that split them), or from
+# deps/ as unpacked by setup/fetch_deps.sh.
 export CC=${CC:-gcc}
 command -v "$CC" >/dev/null || echo "setup/env.sh: warning: C compiler '$CC' not found; Triton kernels won't compile" >&2
 export CPATH="$DEPS_DIR/usr/include:$DEPS_DIR/usr/include/python3.12${CPATH:+:$CPATH}"
