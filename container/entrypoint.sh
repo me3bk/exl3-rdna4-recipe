@@ -1,6 +1,7 @@
 #!/bin/bash
 # Container entrypoint: check the models are mounted, then start TabbyAPI through serve/run_tabby.sh (same environment
-# as a host install). Arguments go to TabbyAPI, e.g. --config /path/to/config.yml or --max-batch-size 2.
+# as a host install). Arguments go to TabbyAPI, e.g. --config /path/to/config.yml or --max-batch-size 2. CTX=128k
+# (docker run -e CTX=128k) serves 128k context instead of the default 96k.
 # Defaults (container/config.yml): models in /models, port 8096, no API key (the container is meant to sit behind a
 # gateway or a port published on 127.0.0.1 only).
 #   entrypoint.sh download   download both models into /models instead (mount it writable; container/run.sh does this)

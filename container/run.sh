@@ -3,15 +3,17 @@
 # amdgpu kernel driver (in every current distro kernel), not ROCm or Python.
 #
 #   container/run.sh            download the models on first use (~14 GB), then serve on http://127.0.0.1:8096/v1
+#   CTX=128k container/run.sh   128k context instead of 96k, if nothing else (or only a light desktop) uses the GPU
 #   container/run.sh logs       follow the server log
 #   container/run.sh stop
 #
-# Environment: IMAGE (default below), MODELS (default ~/.cache/exl3-rdna4/models), PORT (default 8096),
+# Environment: CTX (context, default 96k), IMAGE (default below), MODELS (default ~/.cache/exl3-rdna4/models), PORT (default 8096),
 # CT=docker|podman (default: whichever works, Docker first), NO_TRIAGE=1 (don't offer ./triage.sh on failure).
 set -euo pipefail
 IMAGE=${IMAGE:-ghcr.io/parth-thakre/exl3-rdna4:latest}
 MODELS=${MODELS:-${XDG_CACHE_HOME:-$HOME/.cache}/exl3-rdna4/models}
 PORT=${PORT:-8096}
+CTX=${CTX:-96k}
 NAME=exl3-rdna4
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 
@@ -93,8 +95,8 @@ fi
 
 "$CT" rm -f "$NAME" >/dev/null 2>&1 || true
 "$CT" run -d --name "$NAME" "${gpu_args[@]}" "${user_args[@]}" --shm-size 8g \
-    -p "127.0.0.1:$PORT:8096" -v "$MODELS:/models:ro" "$IMAGE" >/dev/null || die "the container didn't start"
-echo "starting $NAME ($CT); loading the model takes a minute or two"
+    -e CTX="$CTX" -p "127.0.0.1:$PORT:8096" -v "$MODELS:/models:ro" "$IMAGE" >/dev/null || die "the container didn't start"
+echo "starting $NAME ($CT, $CTX context); loading the model takes a minute or two"
 for _ in $(seq 1 120); do
     if curl -sf -m 2 "http://127.0.0.1:$PORT/health" >/dev/null 2>&1; then
         echo "ready: http://127.0.0.1:$PORT/v1 (OpenAI-compatible, no API key; local only)"

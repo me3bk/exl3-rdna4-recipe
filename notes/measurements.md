@@ -30,7 +30,31 @@ Both scripts still allow one request at a time, because concurrent requests with
 current-base run recalled the code; greedy code through `bench/bench_api.py` ran at about 101 tok/s and sampled prose
 at 48-51.
 
-Extra arguments go to TabbyAPI, e.g. `serve/run_tabby.sh --max-seq-len 65536 --cache-size 65536`.
+Extra arguments go to TabbyAPI, e.g. `serve/run_tabby.sh --max-seq-len 65280 --cache-size 65536`, or set the context
+with `CTX=64k serve/run_tabby.sh`.
+
+### Context and other VRAM use (the default is 96k)
+
+What fits depends on what else is on the card: a desktop, a browser. Measured with the published container image
+(5cc1deb) on Parth's RX 9070 XT, 2026-10-13: 3 concurrent requests plus an image request, then the local-ai registry's
+six gates (load, chat, reasoning, tools, context, speed). "In use before" is VRAM used before the server starts: the
+real KDE desktop and a browser, plus a held allocation standing in for a heavier desktop where noted.
+
+| Profile, context | In use before | Peak | Result |
+|---|---|---|---|
+| DFlash2, 128k | 1.14 GB (desktop) | 16,265 of 16,304 MiB | passes all six gates |
+| DFlash2, 96k | 1.14 GB (desktop) | 16,206 MiB | passes |
+| DFlash2, 80k | 1.14 GB (desktop) | 15,767 MiB | passes |
+| DFlash2, 64k | 1.14 GB (desktop) | 15,978 MiB | passes |
+| DFlash2, 128k | 1.93 GB (desktop + 1.2 GB held) | | server exits while loading |
+| DFlash2, 96k | 1.93 GB (desktop + 1.2 GB held) | 16,276 MiB | passes, 112 tok/s |
+| MTP (`run_tabby_long.sh`), 128k | 1.09 GB (desktop) | 16,288 MiB | passes, 107 tok/s |
+| MTP (`run_tabby_long.sh`), 128k | 2.14 GB (desktop + 1.2 GB held) | | server exits while loading |
+
+So the default is 96k, and `CTX=128k` is for a card with nothing else on it or a light desktop. The MTP profile isn't a
+way to keep 128k next to a heavier desktop either: at 128k it also didn't load with ~2.1 GB in use, and it serves one
+request at a time. PyTorch takes what's free, so
+the peak is close to the card's size in every row; it isn't the minimum each needs.
 
 ## Recommended request settings
 

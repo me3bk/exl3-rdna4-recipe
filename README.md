@@ -9,11 +9,13 @@ speculative decoding.
 
 - **Code, one request:** ~150 tok/s at short context, ~105 tok/s at 120k.
 - **Prose and conversation** (sampled, temperature ~0.8): ~55-65 tok/s; the draft is accepted less often on prose.
-- **128k-token context.** Prompt processing runs at about 1,300 tok/s for short prompts and 900 at 128k, so a full
-  128k prompt takes about 2.5 minutes before the first token.
+- **96k-token context by default, 128k optional.** 96k leaves room for a desktop on the same card; 128k
+  (`CTX=128k`) needs the card to itself or a light desktop (it passes with ~1.1 GB of VRAM already in use and doesn't
+  load with ~1.9 GB). Prompt processing runs at about 1,300 tok/s for short prompts and 900 at 128k, so a full 128k
+  prompt takes about 2.5 minutes before the first token.
 - **Tool calling and image input** work through the OpenAI API. Chats with images decode roughly 10-25% slower.
 - **Several requests:** handles 3 requests at once (e.g. agent subagents or parallel tool calls) instead of queuing
-  them (`max_batch_size` in `tabbyAPI/config.yml`); they share the 128k context.
+  them (`max_batch_size` in `tabbyAPI/config.yml`); they share the context.
 - **Setup:** one command with the container (any distro, Omarchy included), or a handful of scripts for a host install.
 
 Speeds are typical for an RX 9070 XT and depend on the content.
@@ -105,7 +107,8 @@ haven't tried it. Reports welcome.
 ## Run
 
 ```bash
-serve/run_tabby.sh           # http://127.0.0.1:8096/v1, 128k context
+serve/run_tabby.sh           # http://127.0.0.1:8096/v1, 96k context
+CTX=128k serve/run_tabby.sh  # 128k: nothing else (or only a light desktop, ~1 GB) on the GPU
 serve/stop_tabby.sh
 ```
 
@@ -123,7 +126,7 @@ Settings live in `tabbyAPI/config.yml` (copied from `serve/config.example.yml`).
 `serve/open-webui.md` sets up a chat UI.
 
 Two other profiles use the model's built-in MTP head instead of the draft model: `serve/run_tabby_long.sh` (128k, no
-draft model needed) and `serve/run_tabby_xl.sh` (160k context). Both are slower than the default.
+draft model needed, same VRAM limit as `CTX=128k`) and `serve/run_tabby_xl.sh` (160k context). Both are slower than the default.
 
 ## If something doesn't work
 

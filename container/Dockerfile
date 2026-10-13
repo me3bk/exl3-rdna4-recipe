@@ -1,5 +1,5 @@
 # ExLlamaV3 with this recipe's RDNA4 patches + TabbyAPI, for the RX 9070 / 9070 XT (gfx1201). Serves Qwen3.8-27B with
-# the DFlash2 draft at 128k context; the models are mounted, not baked in (container/README.md).
+# the DFlash2 draft at 96k context (128k with CTX=128k); the models are mounted, not baked in (container/README.md).
 #
 # The build stage runs the recipe's own setup scripts (setup/) at RECIPE_COMMIT on AMD's ROCm dev image, so the
 # extension is built exactly as the README's install builds it. The runtime stage needs no ROCm: the extension

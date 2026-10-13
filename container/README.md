@@ -1,12 +1,13 @@
 # Container
 
 The whole recipe in one image: ExLlamaV3 with the RDNA4 patches, TabbyAPI, and the tuned settings, serving
-Qwen3.8-27B with the DFlash2 draft at 128k context. The models are downloaded once into a directory on the host and
-mounted read-only.
+Qwen3.8-27B with the DFlash2 draft at 96k context (128k optional). The models are downloaded once into a directory on
+the host and mounted read-only.
 
 The host needs only:
 
-- an RX 9070 or RX 9070 XT (gfx1201), with nothing else using its 16 GB
+- an RX 9070 or RX 9070 XT (gfx1201). A desktop can share it at the default 96k context (tested with ~1.9 GB of its
+  16 GB already in use); 128k needs it to itself or a light desktop (~1 GB)
 - Docker or Podman
 - the amdgpu kernel driver, which every current distro kernel has (check: `/dev/kfd` exists)
 
@@ -18,7 +19,8 @@ gates pass. The Docker path (Omarchy's default) is written for rootful and rootl
 
 ```bash
 git clone https://github.com/parth-thakre/exl3-rdna4-recipe && cd exl3-rdna4-recipe
-container/run.sh          # first run downloads ~14 GB of models; then http://127.0.0.1:8096/v1
+container/run.sh          # first run downloads ~14 GB of models; then http://127.0.0.1:8096/v1, 96k context
+CTX=128k container/run.sh # 128k context, if nothing else (or only a light desktop) uses the GPU
 container/run.sh logs
 container/run.sh stop
 ```
@@ -55,8 +57,8 @@ The models it expects in `/models`, and what `entrypoint.sh download` fetches:
 | `Qwen3.8-27B-EXL3-SC3.0bpw-H4` | [turboderp/Qwen3.8-27B-exl3](https://huggingface.co/turboderp/Qwen3.8-27B-exl3), revision `86b9553` (branch `SC_3.00bpw_H4`) |
 | `Qwen3.8-27B-DFlash2-EXL3-3.0bpw` | [parth-thakre/Qwen3.8-27B-DFlash2-EXL3-3.0bpw](https://huggingface.co/parth-thakre/Qwen3.8-27B-DFlash2-EXL3-3.0bpw), revision `3d915b1` (our 3.0 bpw quant of inco.ai's draft) |
 
-Arguments after the image name go to TabbyAPI (`--max-batch-size 2`, `--config /path/in/container.yml`, ...). The
-built-in config is [`config.yml`](config.yml): the same settings as a host install.
+Add `-e CTX=128k` for 128k context. Arguments after the image name go to TabbyAPI (`--max-batch-size 2`, `--config
+/path/in/container.yml`, ...). The built-in config is [`config.yml`](config.yml): the same settings as a host install.
 
 ## Build
 

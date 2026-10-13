@@ -1,4 +1,4 @@
-# TabbyAPI config: Qwen3.8-27B EXL3 3.0 bpw + DFlash2 3.0 bpw draft, 128k context, on a 16 GB RX 9070 XT (gfx1201).
+# TabbyAPI config: Qwen3.8-27B EXL3 3.0 bpw + DFlash2 3.0 bpw draft, 96k context (128k optional), on a 16 GB RX 9070 XT (gfx1201).
 # setup/install_tabby.sh copies this to tabbyAPI/config.yml; edit that copy. Paths are relative to tabbyAPI/,
 # which is where serve/run_tabby.sh starts the server.
 # The MTP profiles (serve/run_tabby_long.sh, serve/run_tabby_xl.sh) override draft mode and context on the command line.
@@ -20,10 +20,13 @@ model:
   model_dir: ../models
   model_name: Qwen3.8-27B-EXL3-SC3.0bpw-H4
   backend: exllamav3
-  # One 256-token page under cache_size: ExLlamaV3 counts the cache in pages and refuses a request that fills the
-  # whole window when the two are equal.
-  max_seq_len: 130816
-  cache_size: 131072
+  # 96k by default, which leaves room for a desktop on the same card (passes the registry's checks under load with
+  # ~1.9 GB of VRAM already in use). 128k (max_seq_len 130816, cache_size 131072, or CTX=128k) needs the card to
+  # itself or a light desktop: it passes with ~1.1 GB in use and doesn't load with ~1.9 GB.
+  # max_seq_len is one 256-token page under cache_size: ExLlamaV3 counts the cache in pages and refuses a request
+  # that fills the whole window when the two are equal.
+  max_seq_len: 98048
+  cache_size: 98304
   cache_mode: Q4
   gpu_split_auto: true
   autosplit_reserve: [768]

@@ -1,5 +1,6 @@
 #!/bin/bash
-# Default profile: Qwen3.8-27B EXL3 3.0 bpw + DFlash2 3.0 bpw draft (7 tokens), 128k context (tabbyAPI/config.yml).
+# Default profile: Qwen3.8-27B EXL3 3.0 bpw + DFlash2 3.0 bpw draft (7 tokens), 96k context (tabbyAPI/config.yml).
+# CTX=128k serves 128k instead, when nothing else (or only a light desktop, ~1 GB) uses the card; any CTX=<n>k works.
 # The DeltaNet layers verify without a recurrent-state snapshot per draft token and replay only the accepted inputs
 # (about 1 GB less VRAM), which is what fits 128k next to the DFlash2 draft. Upstream does that by default since v1.6.1;
 # EXL3_GDN_REPLAY=1 below only switches it on for a build of the previous base (patches/README.md).
@@ -37,6 +38,15 @@ python -c 'import importlib.util, sys; sys.exit(importlib.util.find_spec("exllam
 cd "$TABBY_TREE"
 export EXL3_GDN_REPLAY=${EXL3_GDN_REPLAY:-1}
 
+# CTX=<n>k: max-seq-len one 256-token page under cache-size (config.example.yml says why). Arguments given after
+# still win.
+ctx_args=()
+if [ -n "${CTX:-}" ]; then
+    k=${CTX%[kK]}
+    [[ $k =~ ^[0-9]+$ ]] && [ "$k" -ge 4 ] || { echo "run_tabby.sh: CTX should look like 96k or 128k, not $CTX" >&2; exit 1; }
+    ctx_args=(--max-seq-len $((k * 1024 - 256)) --cache-size $((k * 1024)))
+fi
+
 mkdir -p "$(dirname "$PIDFILE")"
 echo $$ > "$PIDFILE"     # exec keeps the PID, so this is the server's PID
-exec python main.py "$@"
+exec python main.py "${ctx_args[@]}" "$@"
