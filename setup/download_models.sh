@@ -1,5 +1,6 @@
 #!/bin/bash
-# Download the models into models/ (or MODELS_DIR). Uses the `hf` CLI from huggingface_hub (in the venv).
+# Download the models into models/ (or MODELS_DIR; the 3.0 bpw draft into DRAFT_DIR, default the same). Uses the `hf`
+# CLI from huggingface_hub (in the venv).
 #
 #   setup/download_models.sh            main model (3.0 bpw self-calibrated, ~13.4 GB) + the 3.0 bpw DFlash2 draft (0.9 GB)
 #   setup/download_models.sh main       main model only
@@ -12,20 +13,21 @@
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 MODELS_DIR=${MODELS_DIR:-models}
+DRAFT_DIR=${DRAFT_DIR:-$MODELS_DIR}
 VENV=${VENV:-$ROOT/.venv}
 [ -x "$VENV/bin/hf" ] && export PATH="$VENV/bin:$PATH"
 command -v hf >/dev/null || { echo "hf CLI not found; run setup/make_venv.sh first or pip install huggingface_hub" >&2; exit 1; }
 cd "$ROOT"
 
-# fetch REPO REVISION DIR: download, then leave .download-complete (the revision) in DIR, so an interrupted download
+# fetch REPO REVISION PATH: download, then leave .download-complete (the revision) in PATH, so an interrupted download
 # isn't mistaken for a finished one (container/run.sh checks it). Rerunning resumes and only fetches what's missing.
 fetch() {
-    hf download "$1" --revision "$2" --local-dir "$MODELS_DIR/$3"
-    echo "$1@$2" > "$MODELS_DIR/$3/.download-complete"
+    hf download "$1" --revision "$2" --local-dir "$3"
+    echo "$1@$2" > "$3/.download-complete"
 }
 main() {
     # Branch SC_3.00bpw_H4 of turboderp's repo: self-calibrated 3.0 bpw with a 4-bit head (pinned to the tested commit)
-    fetch turboderp/Qwen3.8-27B-exl3 86b95530f9d365d90dd24d01a997a8de0cdf6c55 Qwen3.8-27B-EXL3-SC3.0bpw-H4
+    fetch turboderp/Qwen3.8-27B-exl3 86b95530f9d365d90dd24d01a997a8de0cdf6c55 "$MODELS_DIR/Qwen3.8-27B-EXL3-SC3.0bpw-H4"
 }
 main_plain() {
     # Branch 3.00bpw (commit 6fe61ad620abfe97c5b49f9722c2bceeea4ccc28 when tested)
@@ -33,7 +35,7 @@ main_plain() {
 }
 draft() {
     # setup/requant_draft.sh's output for incoai/Qwen3.8-27B-DFlash2 at 015e795, byte-identical to what we run
-    fetch parth-thakre/Qwen3.8-27B-DFlash2-EXL3-3.0bpw 3d915b126ceecdb3ce41587ca19faa782a91fee0 Qwen3.8-27B-DFlash2-EXL3-3.0bpw
+    fetch parth-thakre/Qwen3.8-27B-DFlash2-EXL3-3.0bpw 3d915b126ceecdb3ce41587ca19faa782a91fee0 "$DRAFT_DIR/Qwen3.8-27B-DFlash2-EXL3-3.0bpw"
 }
 draft_bf16() {
     # The DFlash2 draft (inco.ai / z-lab, Apache-2.0; mirrored at z-lab/Qwen3.8-27B-DFlash2), at the revision we converted

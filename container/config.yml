@@ -49,7 +49,8 @@ model:
 
 draft_model:
   draft_mode: model
-  draft_model_dir: /models
+  # Its own folder, so the API's model list (/v1/models) shows only the main model
+  draft_model_dir: /models/draft
   # 3.0 bpw requant of incoai/Qwen3.8-27B-DFlash2 (setup/requant_draft.sh). Same speed as the 5.0 bpw quant, 0.89 vs 1.4 GB.
   # With Mia-AiLab's 5.0 bpw draft instead, use Qwen3.8-27B-DFlash2-EXL3-5.0bpw and lower max_seq_len/cache_size.
   draft_model_name: Qwen3.8-27B-DFlash2-EXL3-3.0bpw

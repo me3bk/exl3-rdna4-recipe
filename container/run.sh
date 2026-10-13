@@ -62,6 +62,15 @@ need_own_access() {
 }
 
 gpu_args=(--device /dev/kfd --device /dev/dri)
+# ROCm numbers the GPUs in the kernel's KFD order, which can put an AMD CPU's integrated GPU first; pin the container to
+# the RX 9070 / 9070 XT (gfx1200 / gfx1201) by its UUID. The container still needs every render node: ROCm finds no GPU
+# at all when one in the topology has none.
+for p in /sys/class/kfd/kfd/topology/nodes/*/properties; do
+    [[ $(awk '$1 == "gfx_target_version" {print $2}' "$p") =~ ^12000[01]$ ]] || continue
+    u=$(awk '$1 == "unique_id" {print $2}' "$p")
+    [[ $u =~ ^[0-9]+$ && $u != 0 ]] && gpu_args+=(-e "ROCR_VISIBLE_DEVICES=$(printf 'GPU-%016x' "$u")")
+    break
+done
 user_args=()
 if [ "$CT" = podman ]; then
     need_own_access
@@ -87,8 +96,12 @@ fi
 # Models: downloaded once with the image's own hf CLI into a directory you own. setup/download_models.sh leaves a
 # .download-complete marker only after a model is fully downloaded; an interrupted download resumes.
 mkdir -p "$MODELS" || die "can't create $MODELS"
+# The draft lives in draft/ (so the API lists only the main model); move one downloaded before that
+if [ -d "$MODELS/Qwen3.8-27B-DFlash2-EXL3-3.0bpw" ] && [ ! -e "$MODELS/draft/Qwen3.8-27B-DFlash2-EXL3-3.0bpw" ]; then
+    mkdir -p "$MODELS/draft" && mv "$MODELS/Qwen3.8-27B-DFlash2-EXL3-3.0bpw" "$MODELS/draft/" || die "can't move the draft into $MODELS/draft"
+fi
 if [ ! -f "$MODELS/Qwen3.8-27B-EXL3-SC3.0bpw-H4/.download-complete" ] ||
-   [ ! -f "$MODELS/Qwen3.8-27B-DFlash2-EXL3-3.0bpw/.download-complete" ]; then
+   [ ! -f "$MODELS/draft/Qwen3.8-27B-DFlash2-EXL3-3.0bpw/.download-complete" ]; then
     echo "downloading the models into $MODELS (about 14 GB)"
     "$CT" run --rm "${user_args[@]}" -v "$MODELS:/models" "$IMAGE" download || die "the model download failed (rerun to resume)"
 fi

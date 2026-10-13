@@ -10,7 +10,7 @@ cd /opt/recipe
 M=${EXL3_MODELS:-/models}
 if [ "${1:-}" = download ]; then
     export PATH="/opt/recipe/.venv/bin:$PATH"
-    exec env MODELS_DIR="$M" setup/download_models.sh
+    exec env MODELS_DIR="$M" DRAFT_DIR="$M/draft" setup/download_models.sh
 fi
 config=tabbyAPI/config.yml
 args=("$@")
@@ -23,7 +23,7 @@ for ((i = 0; i < ${#args[@]}; i++)); do
 done
 
 missing=()
-for d in Qwen3.8-27B-EXL3-SC3.0bpw-H4 Qwen3.8-27B-DFlash2-EXL3-3.0bpw; do
+for d in Qwen3.8-27B-EXL3-SC3.0bpw-H4 draft/Qwen3.8-27B-DFlash2-EXL3-3.0bpw; do
     # Only the default layout is checked; a config that names other models is taken as is. The models may come from
     # anywhere (run.sh, the local-ai plugin, by hand), so this looks for config.json, not a download marker.
     if [ "$config" = tabbyAPI/config.yml ] && [ ! -f "$M/$d/config.json" ]; then missing+=("$d"); fi
