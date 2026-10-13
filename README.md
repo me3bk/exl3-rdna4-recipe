@@ -28,7 +28,7 @@ tested on one machine:
 | GPU | AMD RX 9070 XT, 16 GB (gfx1201) |
 | OS | Fedora 44, kernel 7.2 (install also tested in Ubuntu 24.04 and Arch containers, see Requirements) |
 | ROCm | system ROCm 7.1.1 (Fedora packages) to build; PyTorch 2.13.0 + ROCm 7.2 wheels to run |
-| Upstream | ExLlamaV3 `dev` 0f685aa (v1.6.1 plus two days of commits), TabbyAPI `main` 2fd6cc7 |
+| Upstream | ExLlamaV3 `dev` 0f685aa (v1.6.1 plus two days of commits), TabbyAPI `main` a3fed43 |
 
 ## What we added on top of upstream
 
@@ -123,7 +123,8 @@ curl -s http://127.0.0.1:8096/v1/chat/completions -H "Authorization: Bearer $KEY
 
 Settings live in `tabbyAPI/config.yml` (copied from `serve/config.example.yml`). The server only listens on
 127.0.0.1; to use it from other devices over Tailscale, set `network.host` to the machine's Tailscale IP.
-`serve/open-webui.md` sets up a chat UI.
+TabbyAPI has a simple chat page at http://127.0.0.1:8096/ui/ (the startup log prints a link that logs you in);
+`serve/open-webui.md` sets up a fuller chat UI.
 
 Two other profiles use the model's built-in MTP head instead of the draft model: `serve/run_tabby_long.sh` (128k, no
 draft model needed, same VRAM limit as `CTX=128k`) and `serve/run_tabby_xl.sh` (160k context). Both are slower than the default.

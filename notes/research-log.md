@@ -280,3 +280,14 @@ the other 15 commits cherry-picked cleanly.
   switching, code measured 156.6 / 156.4 tok/s (about 152 before) and prose 60.7 / 67.2 (about 60). Expandable segments
   are now off in `setup/env.sh` and on the live server.
 
+
+## TabbyAPI main of 2026-10-12 (adopted)
+
+TabbyAPI 2fd6cc7 to a3fed43 (20 commits): a fix that names the assistant role in the first streamed delta (#501;
+LangChain-style clients dropped streamed tool calls without it), upstream ROCm packaging and docs, a built-in chat page
+at `/ui`, nested model folders, hybrid drafting and disk-cache options (the latter need ExLlamaV3 1.6.2). No new Python
+dependencies, and nothing that touches the allocator setting (`env.sh` still sets it). Same ExLlamaV3 build and live
+config (128k, 3 slots), 2026-10-13, A/B through the API: code 156.1 vs 155.1 tok/s, prose 60.4 vs 60.2, prefill 1,219 /
+1,263 vs 1,242 / 1,262 tok/s at 7.7k / 29.4k, peak 16.25 vs 16.27 GB under concurrent and image load. The first
+streamed delta of a tool call now carries `role: assistant` (it had none). After concurrent and image requests, the
+registry's six gates pass on a3fed43: context recall at 106,084 tokens, 107.3 tok/s, peak 16,282 MiB, no OOM.

@@ -15,9 +15,9 @@ EXLLAMAV3_PATCH=${EXLLAMAV3_PATCH:-patches/exllamav3-rdna4.patch}   # paths are 
 WITH_PR423=${WITH_PR423:-0}
 PR423_PATCH=${PR423_PATCH:-patches/previous/pr423-dflash2-rejection-sampling-0662fac.patch}
 
-# TabbyAPI, main branch. 2fd6cc7 accepts ROCm GPUs natively, so no patch. Set TABBY_PATCH to a file to apply one.
+# TabbyAPI, main branch (2026-10-12). It accepts ROCm GPUs natively (since 2fd6cc7), so no patch. Set TABBY_PATCH to a file to apply one.
 TABBY_GIT_URL=${TABBY_GIT_URL:-https://github.com/theroyallab/tabbyAPI}
-TABBY_COMMIT=${TABBY_COMMIT:-2fd6cc76203a66e13042daf7d76e5898b21c1ad8}
+TABBY_COMMIT=${TABBY_COMMIT:-a3fed43efae3b18ec6181618d6a4a66153a9d14e}
 TABBY_PATCH=${TABBY_PATCH:-}
 
 # PyTorch for ROCm. The wheels ship their own ROCm 7.2 libraries; the system ROCm (7.1.1 on Fedora 44) is only

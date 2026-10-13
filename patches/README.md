@@ -1,7 +1,7 @@
 # Patches
 
 All against ExLlamaV3 `dev` at 0f685aa (v1.6.1 plus two days of commits, among them our DeltaNet scan change).
-TabbyAPI needs no patch at 2fd6cc7, which accepts ROCm GPUs natively.
+TabbyAPI needs no patch: it accepts ROCm GPUs natively since 2fd6cc7 (the recipe uses a3fed43).
 
 | File | Applied by `setup/build_exllamav3.sh` | What |
 |---|---|---|

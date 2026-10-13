@@ -28,7 +28,8 @@ container/run.sh stop
 `run.sh` uses Docker if it works for you, otherwise Podman. The models go to `~/.cache/exl3-rdna4/models` (set
 `MODELS` to change it); an interrupted download resumes on the next run. The API is OpenAI-compatible and has no key:
 it listens on 127.0.0.1 only and refuses browser (cross-origin) callers, so web pages you open can't use it. Put a
-proxy with a key in front before exposing it anywhere else.
+proxy with a key in front before exposing it anywhere else. For a quick chat in the browser, TabbyAPI's own chat page
+is at http://127.0.0.1:8096/ui/.
 
 If something fails, `run.sh` offers to open Claude Code, Codex or OpenCode with the details (`./triage.sh` in the repo
 root, which you can also run yourself).
