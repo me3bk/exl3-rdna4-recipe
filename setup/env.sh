@@ -15,7 +15,9 @@ source "$VENV/bin/activate" || return 1
 # Pick the 9070 XT. On the test machine device 0 is the 9070 XT and the CPU's gfx1036 iGPU is hidden this way.
 # Check `rocminfo` / `amd-smi list` if you have more than one GPU.
 export HIP_VISIBLE_DEVICES=${HIP_VISIBLE_DEVICES:-0}
-find_rocm || return 1   # sets ROCM_PATH/ROCM_HOME: /opt/rocm on most distros, /usr on Fedora (setup/rocm.sh)
+# System ROCm (setup/rocm.sh sets ROCM_PATH/ROCM_HOME: /opt/rocm on most distros, /usr on Fedora). Only building the
+# extension needs it; serving uses the runtime in PyTorch's ROCm wheel, so without it (the container image) carry on.
+find_rocm 2>/dev/null || true
 
 # Triton compiles a small C helper at runtime: it needs a host C compiler (gcc) and
 # Python.h. The headers come with Python (python3.12-devel / python3.12-dev on distros that split them), or from

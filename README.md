@@ -12,9 +12,9 @@ speculative decoding.
 - **128k-token context.** Prompt processing runs at about 1,300 tok/s for short prompts and 900 at 128k, so a full
   128k prompt takes about 2.5 minutes before the first token.
 - **Tool calling and image input** work through the OpenAI API. Chats with images decode roughly 10-25% slower.
-- **Several requests:** handles up to 4 requests at once (e.g. agent subagents or parallel tool calls) instead of
-  queuing them; 3 by default (`max_batch_size` in `tabbyAPI/config.yml`); they share the 128k context.
-- **Setup:** a handful of scripts, below.
+- **Several requests:** handles 3 requests at once (e.g. agent subagents or parallel tool calls) instead of queuing
+  them (`max_batch_size` in `tabbyAPI/config.yml`); they share the 128k context.
+- **Setup:** one command with the container (any distro, Omarchy included), or a handful of scripts for a host install.
 
 Speeds are typical for an RX 9070 XT and depend on the content.
 
@@ -39,10 +39,25 @@ tested on one machine:
   VRAM, which is what makes 128k fit next to the draft model) re-read and re-wrote the recurrent state for every drafted
   token; keeping it in registers cuts the DeltaNet layers' time per verify step by a fifth (15.0 to 12.1 ms), with
   bit-identical output. turboderp merged it into `dev` (0f685aa, from our issue #505), so it's no longer in our patch.
-- **3.0 bpw DFlash2 draft (requant script):** 0.5 GB smaller than the 5.0 bpw quant, same speed.
+- **3.0 bpw DFlash2 draft:** 0.5 GB smaller than the 5.0 bpw quant, same speed;
+  [on Hugging Face](https://huggingface.co/parth-thakre/Qwen3.8-27B-DFlash2-EXL3-3.0bpw), or make it with
+  `setup/requant_draft.sh`.
 - **Setup scripts:** pinned versions, missing headers fetched without sudo, one command each to build and serve.
 
-## Requirements
+## Quick start: container (any distro, Omarchy)
+
+With Docker or Podman and the in-kernel amdgpu driver, nothing else to install (no ROCm, no Python):
+
+```bash
+git clone https://github.com/parth-thakre/exl3-rdna4-recipe && cd exl3-rdna4-recipe
+container/run.sh             # downloads the models once (~14 GB), then serves http://127.0.0.1:8096/v1
+```
+
+On Omarchy, Docker is already there, so that's all (tested so far with Podman on Fedora; the Docker path not yet). [`container/README.md`](container/README.md) has the details, the
+plain `docker run` command and how to build the image. The rest of this README is the host install, which is what the
+measurements were taken on (the container builds the same code with the same scripts).
+
+## Requirements (host install)
 
 - AMD RX 9070 XT or RX 9070 (gfx1201, 16 GB). Only the 9070 XT has been tested.
 - Linux with a ROCm HIP SDK (compiler, HIP headers and the math libraries' headers); ROCm 7.1.1 and 7.2.4 tested. The
@@ -72,11 +87,20 @@ setup/fetch_deps.sh          # check the ROCm and Python headers; on Fedora fetc
 setup/make_venv.sh           # .venv/ with PyTorch 2.13 for ROCm 7.2 and the tested package versions
 setup/build_exllamav3.sh     # clone ExLlamaV3 at the pinned commit, apply our patch, compile for gfx1201
 setup/install_tabby.sh       # clone TabbyAPI at the pinned commit, write tabbyAPI/config.yml
-setup/download_models.sh     # Qwen3.8-27B EXL3 3.0 bpw SC H4 (13.4 GB) + the DFlash2 draft source (3.8 GB)
-setup/requant_draft.sh       # turn the draft into a 3.0 bpw EXL3 model (uses the GPU, a few minutes)
+setup/download_models.sh     # Qwen3.8-27B EXL3 3.0 bpw SC H4 (13.4 GB) + the 3.0 bpw DFlash2 draft (0.9 GB)
 ```
 
+The draft is our 3.0 bpw EXL3 quant of inco.ai's DFlash2 draft,
+[published on Hugging Face](https://huggingface.co/parth-thakre/Qwen3.8-27B-DFlash2-EXL3-3.0bpw). To make it yourself
+instead: `setup/download_models.sh draft-bf16`, then `setup/requant_draft.sh` (uses the GPU, a few minutes).
+
 The scripts are safe to rerun. If a checkout has local changes they stop and say so; `RESET=1` starts it over.
+
+### Windows
+
+Not tested. ROCm under WSL2 reportedly supports the RX 9070 / 9070 XT, so the Ubuntu 24.04 instructions above inside
+WSL2 are the likely route; native Windows has open gfx1201 bugs in ROCm (silent zero results, failing kernels) and we
+haven't tried it. Reports welcome.
 
 ## Run
 
@@ -100,6 +124,13 @@ Settings live in `tabbyAPI/config.yml` (copied from `serve/config.example.yml`).
 
 Two other profiles use the model's built-in MTP head instead of the draft model: `serve/run_tabby_long.sh` (128k, no
 draft model needed) and `serve/run_tabby_xl.sh` (160k context). Both are slower than the default.
+
+## If something doesn't work
+
+`./triage.sh` collects what's needed to debug it (distro, kernel, GPU access, container runtime, recipe version, the
+last server and build logs, with anything that looks like an API key removed) and opens Claude Code, Codex or
+OpenCode, whichever you have, with it. `./triage.sh "what you saw"` adds your own description; `./triage.sh --print`
+just writes the file for you to paste anywhere. `container/run.sh` offers it when it fails.
 
 ## Details and measurements
 

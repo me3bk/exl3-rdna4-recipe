@@ -244,6 +244,20 @@ the other 15 commits cherry-picked cleanly.
   164/198 (158 on 9cc3bd1, 160 on the previous base), within the run-to-run spread. No server errors, VRAM flat.
 - Full GPQA at `xhigh` (60k cap, 2 at a time): 175/198 (88.4%) against 164 for `medium` on the same build. It got 18 of
   the 34 `medium` missed and missed 7 `medium` got; 6 answers hit the 60k cap, all wrong (`notes/measurements.md`).
+- Container image (`container/`): a build stage runs the recipe's setup scripts on AMD's ROCm 7.2.4 Ubuntu image, the
+  runtime stage is plain Ubuntu 24.04 with Python 3.12, gcc and the Python headers, no ROCm: the extension's ROCm
+  libraries resolve to the PyTorch wheel's bundled copies, which carry the same sonames (`libamdhip64.so.7`,
+  `libhipblas.so.3`, ...). 16.5 GB. Tested on Parth's card with the models mounted read-only: greedy output identical
+  to the host build (4 x 400 tokens), 153 / 61 tok/s code / prose through the API (host: 156 / 61-67), and the registry
+  gates passed (106k-token context recall included). `container/run.sh` picks Docker or Podman, downloads the models
+  with the image's own `hf` and serves on 127.0.0.1; the draft comes from Hugging Face now
+  (parth-thakre/Qwen3.8-27B-DFlash2-EXL3-3.0bpw, byte-identical to the requant we run), so nothing needs the GPU before
+  serving. `triage.sh` collects the details and opens Claude Code, Codex or OpenCode (a free model) when something fails.
+- `max_seq_len` equal to `cache_size` (both 131072) refuses the one request that fills the window: a 131,008-token
+  prompt with `max_tokens: 64` failed with "Job requires 513 pages (only 512 available)" (ExLlamaV3 counts the cache in
+  256-token pages and needs one more than the window). The configs now use `max_seq_len: 130816` with
+  `cache_size: 131072`; the MTP profiles likewise. Found through the check in sybil-solutions/local-ai-images' build
+  workflow, then reproduced on the live server.
 - Other distros. The setup scripts assumed Fedora: ROCm under `/usr`, ROCm's clang in `/usr/lib64/rocm/llvm/bin`,
   headers fetched with `dnf`. `setup/rocm.sh` now finds ROCm through `hipconfig` (`/opt/rocm` on AMD's packages and
   Arch), and `setup/fetch_deps.sh` checks the headers and prints the missing packages for Fedora, Debian/Ubuntu or Arch

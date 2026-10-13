@@ -3,7 +3,7 @@
 # The DeltaNet layers verify without a recurrent-state snapshot per draft token and replay only the accepted inputs
 # (about 1 GB less VRAM), which is what fits 128k next to the DFlash2 draft. Upstream does that by default since v1.6.1;
 # EXL3_GDN_REPLAY=1 below only switches it on for a build of the previous base (patches/README.md).
-# Extra arguments go to TabbyAPI's main.py and override config.yml, e.g. --max-seq-len 65536 --cache-size 65536.
+# Extra arguments go to TabbyAPI's main.py and override config.yml, e.g. --max-seq-len 65280 --cache-size 65536 (keep max-seq-len a 256-token page under cache-size).
 #
 # Which code runs:
 #   EXL3_TREE   exllamav3 checkout put first on PYTHONPATH (default: exllamav3/ in the repo root, if it has a built

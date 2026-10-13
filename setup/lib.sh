@@ -1,6 +1,6 @@
 # Shared helpers for the setup scripts. Source it; don't run it.
 
-die() { echo "error: $*" >&2; exit 1; }
+die() { echo "error: $*" >&2; echo "For help: ./triage.sh opens an AI coding agent (Claude Code, Codex or OpenCode) with the details." >&2; exit 1; }
 
 # is_checkout DIR: DIR is the top level of a git work tree (a clone or a worktree, where .git is a file)
 is_checkout() {
