@@ -64,10 +64,17 @@ a cautious stand-in: with the earlier build, a real desktop using ~1.1 GB passed
 nearly all of it held, didn't. Probably the driver can move a desktop's buffers to system memory when the card fills
 up, but not compute allocations (not verified). "In use" is sysfs VRAM used before the server starts.
 
-| Setting (128k) | Passes with | Fails with | Prefill, 64k / 96k / 120k prompt |
-|---|---|---|---|
-| default | 667 MiB in use | 783 MiB | 997 / 863 / 867 tok/s |
-| `EXL3_QC_STAGING=0` (+ `--autosplit-reserve 256`) | 873 MiB | 975 MiB | 825 / 657 / 623 tok/s |
+| Setting (128k) | Passes with | Fails with | Prefill, 64k / 96k / 120k prompt | Decode, 64k / 96k / 120k |
+|---|---|---|---|---|
+| default (Q4 cache) | 667 MiB in use | 783 MiB | 997 / 863 / 867 tok/s | 131 / 123 / 104 |
+| `EXL3_QC_STAGING=0` (+ `--autosplit-reserve 256`) | 873 MiB | 975 MiB | 825 / 657 / 623 tok/s | 131 / 120 / 108 |
+| `--cache-mode 4,3 --autosplit-reserve 256` | 1,025 MiB | 1,281 MiB | 1,096 / 966 / 869 tok/s | 119 / 106 / 95 |
+| `--cache-mode 3,3 --autosplit-reserve 256` | 1,281 MiB | 1,537 MiB | 1,094 / 963 / 867 tok/s | 112 / 101 / 88 |
+
+Two rounds for the first two rows; one round for the cache modes, run together with `--cache-mode 4,4` (the same as Q4)
+as their reference: 1,097 / 968 / 869 prefill, 120 / 120 / 107 decode. Prefill at 64k and 96k came out ~10% higher
+in that run than in the first rows' for the same cache, so compare within a run. Recall was right at every depth in
+every mode.
 
 - Where it fails: the long-context gate's 106k-token prefill. By default ExLlamaV3 dequantizes the whole Q4 cache pool
   of one layer into an fp16 scratch for prefill attention (K and V, 256 MiB each at 128k for this model's 4 KV heads
@@ -84,6 +91,13 @@ up, but not compute allocations (not verified). "In use" is sysfs VRAM used befo
 - No effect at the load check, where they all failed at the same point (not tested past it): `--chunk-size 512`,
   `--max-batch-size 2`, `--draft-num-tokens 5`, a 3-bit draft cache. turboderp's `SC_3.00bpw_H4_V4` quant is 0.46 GB smaller only because
   its vision encoder is 4-bit, which runs from system RAM here, so it saves no VRAM.
+- A 3-bit cache: `--cache-mode 3,3` holds 3 bits per K and V value instead of 4, so the 128k cache is ~0.5 GB smaller
+  (16 attention layers x 4 KV heads x 256 x 2 x 1/8 byte less per token), and the staging scratch stays the same.
+  It gives the most room (~0.6 GB more than the default) without slowing prefill, but decode at long context is
+  7-18% slower (the split-decode Q4W kernel is 4-bit only; other bit widths take the generic path). 4,3 is halfway.
+  GPQA Diamond (198 questions, medium + anti-spiral, 3 at a time, through the image at 128k): 154 with 3,3 against 160
+  with 4,4 in the same container (17 questions right only with 4,4, 11 only with 3,3). 154 is below every 4-bit run so
+  far (158, 160, 164), so a small quality loss is likely, though one comparison can't confirm it. Opt-in only.
 - What would: blockwise staging (dequantize a few thousand tokens at a time and merge the partial attention by its
   log-sum-exp) would keep the fast fp16 kernel without the full-pool scratch. The prefill kernel doesn't return the
   log-sum-exp yet, so that's kernel work, not done.
@@ -309,6 +323,7 @@ All 198 questions, 3.0 bpw, `medium` + anti-spiral, same sampling, through the s
 | SC H4 quant (2026-10-09, see below) | 80.8% (160/198) | 4 |
 | SC H4 quant, current base (2026-10-12) | 79.8% (158/198) | 4 |
 | SC H4 quant, current base on 0f685aa (2026-10-13) | 82.8% (164/198) | 5 |
+| SC H4 quant, the container image (aec2d311: TabbyAPI a3fed43, expandable segments off), 128k (2026-10-14) | 80.8% (160/198) | 4 |
 
 **All 198 at `xhigh` (2026-10-13): 88.4% (175/198).** Same build, quant, prompt and sampling as the 0f685aa row, with
 a 60k token cap and two requests at a time (`GPQA_EFFORT=xhigh GPQA_MAX_TOKENS=60000 GPQA_WORKERS=2`):
@@ -539,10 +554,11 @@ projections at ~25%. A token takes ~1,250-1,450 kernel launches.
 
 ## What didn't work
 
-- `EXL3_QC_STAGING=0`: the model then fails to load.
+- `EXL3_QC_STAGING=0` on the old base: the model failed to load. On the current base it loads and frees ~0.2 GB at
+  128k for slower long-prompt prefill ("What 128k needs, and what lowers it").
 - 2-bit KV cache for the draft: slower in our runs, and we didn't keep a clean A/B.
-- K4/V3 KV cache for the main model (96k, 2-bit draft cache in both): 110.0 vs 118.1 tok/s at 8.1k and 53.2 vs 66.1
-  at 97.7k against Q4, and no VRAM headroom gained.
+- K4/V3 KV cache for the main model on the old base (96k, 2-bit draft cache in both): 110.0 vs 118.1 tok/s at 8.1k and
+  53.2 vs 66.1 at 97.7k against Q4, and no VRAM headroom gained. On the current base at 128k it gains room (above).
 - A 4-token draft to save memory (80k): 84.5 vs 119.9 tok/s at 63.3k against 7 tokens, because fewer tokens per step
   means more full KV reads.
 - Lowering `autosplit_reserve`: it frees nothing that's actually resident.
