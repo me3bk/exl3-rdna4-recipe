@@ -16,7 +16,8 @@ speculative decoding.
 - **Tool calling and image input** work through the OpenAI API. Chats with images decode roughly 10-25% slower.
 - **Several requests:** handles 3 requests at once (e.g. agent subagents or parallel tool calls) instead of queuing
   them (`max_batch_size` in `tabbyAPI/config.yml`); they share the context.
-- **Setup:** one command with the container (any distro, Omarchy included), or a handful of scripts for a host install.
+- **Setup:** one line to install and run (a container, any distro, Omarchy included), or a handful of scripts for a
+  host install.
 
 Speeds are typical for an RX 9070 XT and depend on the content.
 
@@ -49,6 +50,14 @@ tested on one machine:
 ## Quick start: container (any distro, Omarchy)
 
 With Docker or Podman and the in-kernel amdgpu driver, nothing else to install (no ROCm, no Python):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/parth-thakre/exl3-rdna4-recipe/main/install.sh | bash
+```
+
+That puts the recipe in `~/.local/share/exl3-rdna4-recipe`, downloads the models once (~14 GB) and serves
+http://127.0.0.1:8096/v1 (a chat page at `/ui`). Run it again to update. If you'd rather read the script first, the
+same thing by hand:
 
 ```bash
 git clone https://github.com/parth-thakre/exl3-rdna4-recipe && cd exl3-rdna4-recipe

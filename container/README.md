@@ -18,6 +18,7 @@ gates pass. The Docker path (Omarchy's default) is written for rootful and rootl
 ## Run
 
 ```bash
+curl -fsSL https://raw.githubusercontent.com/parth-thakre/exl3-rdna4-recipe/main/install.sh | bash   # or, by hand:
 git clone https://github.com/parth-thakre/exl3-rdna4-recipe && cd exl3-rdna4-recipe
 container/run.sh          # first run downloads ~14 GB of models; then http://127.0.0.1:8096/v1, 96k context
 CTX=128k container/run.sh # 128k context, if nothing else (or only a light desktop) uses the GPU
