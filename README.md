@@ -13,6 +13,9 @@ speculative decoding.
   (`CTX=128k`) needs the card to itself or a light desktop (it passes with ~1.1 GB of VRAM already in use and doesn't
   load with ~1.9 GB). Prompt processing runs at about 1,300 tok/s for short prompts and 900 at 128k, so a full 128k
   prompt takes about 2.5 minutes before the first token.
+- **Accuracy:** GPQA Diamond 88.4% (175/198) at `xhigh` effort, 80.8% at `medium` (all 198 questions; how in
+  [notes/measurements.md](notes/measurements.md#accuracy-gpqa-diamond)). A third-party run of the BF16 model scored
+  89.9%, with settings not identical to ours.
 - **Tool calling and image input** work through the OpenAI API. Chats with images decode roughly 10-25% slower.
 - **Several requests:** handles 3 requests at once (e.g. agent subagents or parallel tool calls) instead of queuing
   them (`max_batch_size` in `tabbyAPI/config.yml`); they share the context.
