@@ -18,7 +18,8 @@ speculative decoding.
   the BF16 model scored 89.9%, with settings not identical to ours.
 - **Tool calling and image input** work through the OpenAI API. Chats with images decode roughly 10-25% slower.
 - **Several requests:** handles 3 requests at once (e.g. agent subagents or parallel tool calls) instead of queuing
-  them (`max_batch_size` in `tabbyAPI/config.yml`); they share the context.
+  them (`max_batch_size` in `tabbyAPI/config.yml`). They share the one context: a single request can use all 96k, or
+  several split it.
 - **Setup:** one line to install and run (a container, any distro, Omarchy included), or a handful of scripts for a
   host install.
 
