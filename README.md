@@ -11,11 +11,11 @@ speculative decoding.
 - **Prose and conversation** (sampled, temperature ~0.8): ~55-65 tok/s; the draft is accepted less often on prose.
 - **96k-token context by default, 128k optional.** 96k leaves room for a desktop on the same card; 128k
   (`CTX=128k`) needs the card to itself or a light desktop (it passes with ~1.1 GB of VRAM already in use and doesn't
-  load with ~1.9 GB). Prompt processing runs at about 1,300 tok/s for short prompts and 900 at 128k, so a full 128k
+  load with ~1.9 GB). Prompt processing runs at about 1,100-1,250 tok/s for short prompts and 900 at 128k, so a full 128k
   prompt takes about 2.5 minutes before the first token.
-- **Accuracy:** GPQA Diamond 88.4% (175/198) at `xhigh` effort, 80.8% at `medium` (all 198 questions; how in
-  [notes/measurements.md](notes/measurements.md#accuracy-gpqa-diamond)). A third-party run of the BF16 model scored
-  89.9%, with settings not identical to ours.
+- **Accuracy:** GPQA Diamond 88.4% (175/198) at `xhigh` effort (one run), about 81% at `medium` (158-164 of 198
+  over four runs; how in [notes/measurements.md](notes/measurements.md#accuracy-gpqa-diamond)). A third-party run of
+  the BF16 model scored 89.9%, with settings not identical to ours.
 - **Tool calling and image input** work through the OpenAI API. Chats with images decode roughly 10-25% slower.
 - **Several requests:** handles 3 requests at once (e.g. agent subagents or parallel tool calls) instead of queuing
   them (`max_batch_size` in `tabbyAPI/config.yml`); they share the context.
@@ -161,8 +161,11 @@ the benchmark scripts in [bench/README.md](bench/README.md), and the code review
   Qwen3.8-27B.
 - [TabbyAPI](https://github.com/theroyallab/tabbyAPI) by theroyallab (AGPL-3.0), used unmodified.
 - DFlash2 by [z-lab](https://github.com/z-lab/dflash) / [inco.ai](https://inco.ai/blog/dflash2/): the draft model
-  [incoai/Qwen3.8-27B-DFlash2](https://huggingface.co/incoai/Qwen3.8-27B-DFlash2) (Apache-2.0). Mia-AiLab for the first
-  EXL3 quant of it.
+  [incoai/Qwen3.8-27B-DFlash2](https://huggingface.co/incoai/Qwen3.8-27B-DFlash2) (Apache-2.0).
+- [Mia's AI Lab](https://github.com/MiaAI-Lab), whose
+  [Qwen3.8-27B one-click install for Nvidia GPUs](https://github.com/MiaAI-Lab/Qwen3.8-27B-16gb-NVIDIA-GPUs-one-click-install)
+  started this project, and for the first EXL3 quant of the DFlash2 draft
+  ([Mia-AiLab/Qwen3.8-27B-DFlash2-EXL3-5.0bpw](https://huggingface.co/Mia-AiLab/Qwen3.8-27B-DFlash2-EXL3-5.0bpw)).
 - Rafa ([@rafatxf](https://github.com/rafatxf)) for DFlash2 rejection sampling, exllamav3 PR #423, included as an
   optional patch for the previous base (off by default; see `patches/README.md`).
 - TensorFold, for the idea behind our earlier DeltaNet replay, and HermiG for the replay upstream now ships (#489).

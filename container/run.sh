@@ -64,7 +64,7 @@ need_own_access() {
 
 gpu_args=(--device /dev/kfd --device /dev/dri)
 # ROCm numbers the GPUs in the kernel's KFD order, which can put an AMD CPU's integrated GPU first; pin the container to
-# the RX 9070 / 9070 XT (gfx1200 / gfx1201) by its UUID. The container still needs every render node: ROCm finds no GPU
+# the RDNA4 card (gfx1200 / gfx1201; the image is built for gfx1201) by its UUID. The container still needs every render node: ROCm finds no GPU
 # at all when one in the topology has none.
 for p in /sys/class/kfd/kfd/topology/nodes/*/properties; do
     [[ $(awk '$1 == "gfx_target_version" {print $2}' "$p") =~ ^12000[01]$ ]] || continue
